@@ -83,6 +83,7 @@ E:\Projects\NexLauncher\obj\Debug\net10.0\NexLauncher.GeneratedMSBuildEditorConf
 E:\Projects\NexLauncher\obj\Debug\net10.0\NexLauncher.AssemblyInfoInputs.cache
 E:\Projects\NexLauncher\obj\Debug\net10.0\NexLauncher.AssemblyInfo.cs
 E:\Projects\NexLauncher\obj\Debug\net10.0\NexLauncher.csproj.CoreCompileInputs.cache
+E:\Projects\NexLauncher\obj\Debug\net10.0\NexLauncher.sourcelink.json
 E:\Projects\NexLauncher\obj\Debug\net10.0\NexLaunc.EC611CCA.Up2Date
 E:\Projects\NexLauncher\obj\Debug\net10.0\NexLauncher.dll
 E:\Projects\NexLauncher\obj\Debug\net10.0\refint\NexLauncher.dll
