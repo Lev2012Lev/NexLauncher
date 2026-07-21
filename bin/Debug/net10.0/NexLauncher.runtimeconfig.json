@@ -7,6 +7,7 @@
     },
     "configProperties": {
       "Avalonia.Diagnostics.Diagnostic.IsEnabled": true,
+      "MVVMTOOLKIT_ENABLE_INOTIFYPROPERTYCHANGING_SUPPORT": true,
       "System.Runtime.Serialization.EnableUnsafeBinaryFormatterSerialization": false
     }
   }

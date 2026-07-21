@@ -9,7 +9,7 @@ build_property.AvaloniaNameGeneratorAttachDevTools = true
 build_property.AvaloniaUseCompiledBindingsByDefault = true
 build_property.AvaloniaMainPackageVersion = 12.1.0
 build_property.AvaloniaPreviewerNetCoreToolPath = C:\Users\nravi\.nuget\packages\avalonia\12.1.0\buildTransitive\\..\tools\net8.0\designer\Avalonia.Designer.HostApp.dll
-build_property.AvaloniaResourcePaths = 
+build_property.AvaloniaResourcePaths = E:\Projects\NexLauncher\App.axaml,E:\Projects\NexLauncher\MainWindow.axaml
 build_property.MvvmToolkitEnableINotifyPropertyChangingSupport = true
 build_property._MvvmToolkitIsUsingWindowsRuntimePack = false
 build_property.CsWinRTComponent = 
@@ -36,10 +36,4 @@ build_property.EnableCodeStyleSeverity =
 build_metadata.AdditionalFiles.SourceItemGroup = AvaloniaXaml
 
 [E:/Projects/NexLauncher/MainWindow.axaml]
-build_metadata.AdditionalFiles.SourceItemGroup = AvaloniaXaml
-
-[E:/Projects/NexLauncher/Views/HomeView.axaml]
-build_metadata.AdditionalFiles.SourceItemGroup = AvaloniaXaml
-
-[E:/Projects/NexLauncher/Views/SettingsView.axaml]
 build_metadata.AdditionalFiles.SourceItemGroup = AvaloniaXaml

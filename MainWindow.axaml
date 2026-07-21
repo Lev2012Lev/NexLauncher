@@ -2,8 +2,78 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-        mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="450"
+        mc:Ignorable="d"
+        d:DesignWidth="1200"
+        d:DesignHeight="700"
         x:Class="NexLauncher.MainWindow"
         Title="NexLauncher">
-    Welcome to Avalonia!
+        
+
+    <Grid>
+
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="220"/>
+            <ColumnDefinition Width="*"/>
+        </Grid.ColumnDefinitions>
+
+        <!-- Левая панель -->
+        <Border Grid.Column="0"
+                Background="#202225">
+
+            <StackPanel Margin="20">
+
+                <TextBlock Text="NexLauncher"
+                           FontSize="24"
+                           FontWeight="Bold"
+                           Margin="0,0,0,30"/>
+
+                <Button Margin="0,5">
+                    Home
+                </Button>
+
+                <Button Margin="0,5">
+                    Instances
+                </Button>
+
+                <Button Margin="0,5">
+                    Downloads
+                </Button>
+
+                <Button Margin="0,5">
+                    Themes
+                </Button>
+
+                <Button Margin="0,5">
+                    Settings
+                </Button>
+
+            </StackPanel>
+
+        </Border>
+
+        <!-- Основная часть -->
+        <Grid Grid.Column="1">
+
+            <StackPanel
+                HorizontalAlignment="Center"
+                VerticalAlignment="Center"
+                Spacing="20">
+
+                <TextBlock
+                    Text="Welcome to NexLauncher"
+                    FontSize="32"
+                    FontWeight="Bold"/>
+
+                <Button
+                    Width="220"
+                    Height="50">
+                    Play
+                </Button>
+
+            </StackPanel>
+
+        </Grid>
+
+    </Grid>
+
 </Window>

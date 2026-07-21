@@ -1,3 +1,5 @@
+E:\Projects\NexLauncher\obj\Debug\net10.0\NexLauncher.csproj.AssemblyReference.cache
+E:\Projects\NexLauncher\obj\Debug\net10.0\Avalonia\Resources.Inputs.cache
 E:\Projects\NexLauncher\bin\Debug\net10.0\NexLauncher.exe
 E:\Projects\NexLauncher\bin\Debug\net10.0\NexLauncher.deps.json
 E:\Projects\NexLauncher\bin\Debug\net10.0\NexLauncher.runtimeconfig.json
@@ -27,6 +29,7 @@ E:\Projects\NexLauncher\bin\Debug\net10.0\Avalonia.Win32.Automation.dll
 E:\Projects\NexLauncher\bin\Debug\net10.0\Avalonia.Win32.dll
 E:\Projects\NexLauncher\bin\Debug\net10.0\Avalonia.X11.dll
 E:\Projects\NexLauncher\bin\Debug\net10.0\AvaloniaUI.DiagnosticsSupport.Avalonia.dll
+E:\Projects\NexLauncher\bin\Debug\net10.0\CommunityToolkit.Mvvm.dll
 E:\Projects\NexLauncher\bin\Debug\net10.0\HarfBuzzSharp.dll
 E:\Projects\NexLauncher\bin\Debug\net10.0\MicroCom.Runtime.dll
 E:\Projects\NexLauncher\bin\Debug\net10.0\Microsoft.Extensions.DependencyInjection.Abstractions.dll
@@ -76,8 +79,6 @@ E:\Projects\NexLauncher\bin\Debug\net10.0\runtimes\win-x64\native\libSkiaSharp.d
 E:\Projects\NexLauncher\bin\Debug\net10.0\runtimes\win-x64\native\libSkiaSharp.pdb
 E:\Projects\NexLauncher\bin\Debug\net10.0\runtimes\win-x86\native\libSkiaSharp.dll
 E:\Projects\NexLauncher\bin\Debug\net10.0\runtimes\win-x86\native\libSkiaSharp.pdb
-E:\Projects\NexLauncher\obj\Debug\net10.0\NexLauncher.csproj.AssemblyReference.cache
-E:\Projects\NexLauncher\obj\Debug\net10.0\Avalonia\Resources.Inputs.cache
 E:\Projects\NexLauncher\obj\Debug\net10.0\Avalonia\resources
 E:\Projects\NexLauncher\obj\Debug\net10.0\NexLauncher.GeneratedMSBuildEditorConfig.editorconfig
 E:\Projects\NexLauncher\obj\Debug\net10.0\NexLauncher.AssemblyInfoInputs.cache
