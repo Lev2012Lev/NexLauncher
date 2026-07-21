@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("NexLauncher")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+fdf98176b7a62d7c98c88bef0bb76b4ba51b20f0")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+2ec126d67d8d32e0d0cbf03c1a963eb611008137")]
 [assembly: System.Reflection.AssemblyProductAttribute("NexLauncher")]
 [assembly: System.Reflection.AssemblyTitleAttribute("NexLauncher")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
