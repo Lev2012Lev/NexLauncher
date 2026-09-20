@@ -1,79 +1,241 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
-        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-        mc:Ignorable="d"
-        d:DesignWidth="1200"
-        d:DesignHeight="700"
+        xmlns:vm="using:NexLauncher.ViewModels"
+        xmlns:models="using:NexLauncher.Models"
         x:Class="NexLauncher.MainWindow"
-        Title="NexLauncher">
-        
-
-    <Grid>
-
-        <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="220"/>
-            <ColumnDefinition Width="*"/>
-        </Grid.ColumnDefinitions>
-
-        <!-- Левая панель -->
-        <Border Grid.Column="0"
-                Background="#202225">
-
-            <StackPanel Margin="20">
-
-                <TextBlock Text="NexLauncher"
-                           FontSize="24"
-                           FontWeight="Bold"
-                           Margin="0,0,0,30"/>
-
-                <Button Margin="0,5">
-                    Home
-                </Button>
-
-                <Button Margin="0,5">
-                    Instances
-                </Button>
-
-                <Button Margin="0,5">
-                    Downloads
-                </Button>
-
-                <Button Margin="0,5">
-                    Themes
-                </Button>
-
-                <Button Margin="0,5">
-                    Settings
-                </Button>
-
-            </StackPanel>
-
+        x:DataType="vm:MainWindowViewModel"
+        x:CompileBindings="True"
+        Title="NexLauncher"
+        Width="1060" Height="760" MinWidth="900" MinHeight="650"
+        WindowStartupLocation="CenterScreen">
+    <Grid ColumnDefinitions="196,*">
+        <Border Background="#202225" BorderBrush="#30343A" BorderThickness="0,0,1,0">
+            <Grid RowDefinitions="Auto,Auto,*,Auto" Margin="14,28,14,20">
+                <StackPanel Orientation="Horizontal" Spacing="10" Margin="9,0,0,32">
+                    <Border Width="30" Height="30" CornerRadius="8" Background="#78D9B3">
+                        <TextBlock Text="N" FontSize="18" FontWeight="Bold" Foreground="#103429"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                    <TextBlock Text="NexLauncher" FontSize="18" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                </StackPanel>
+                <StackPanel Grid.Row="1" Spacing="6">
+                    <Button Classes="nav" Classes.active="{Binding IsPlayPage}" Command="{Binding NavigateCommand}" CommandParameter="play">
+                        <StackPanel Orientation="Horizontal" Spacing="14">
+                            <PathIcon Width="15" Height="15" Data="M 3,1 L 18,10 L 3,19 Z"/>
+                            <TextBlock Text="Играть"/>
+                        </StackPanel>
+                    </Button>
+                    <Button Classes="nav" Classes.active="{Binding IsInstancesPage}" Command="{Binding NavigateCommand}" CommandParameter="instances">
+                        <StackPanel Orientation="Horizontal" Spacing="14">
+                            <PathIcon Width="15" Height="15" Data="M 1,1 L 8,1 L 8,8 L 1,8 Z M 11,1 L 18,1 L 18,8 L 11,8 Z M 1,11 L 8,11 L 8,18 L 1,18 Z M 11,11 L 18,11 L 18,18 L 11,18 Z"/>
+                            <TextBlock Text="Сборки"/>
+                        </StackPanel>
+                    </Button>
+                    <Button Classes="nav" Classes.active="{Binding IsSettingsPage}" Command="{Binding NavigateCommand}" CommandParameter="settings">
+                        <StackPanel Orientation="Horizontal" Spacing="14">
+                            <PathIcon Width="15" Height="15" Data="M 2,4 L 20,4 L 20,6 L 2,6 Z M 2,10 L 20,10 L 20,12 L 2,12 Z M 2,16 L 20,16 L 20,18 L 2,18 Z M 6,2 L 9,2 L 9,8 L 6,8 Z M 14,8 L 17,8 L 17,14 L 14,14 Z M 7,14 L 10,14 L 10,20 L 7,20 Z"/>
+                            <TextBlock Text="Настройки"/>
+                        </StackPanel>
+                    </Button>
+                </StackPanel>
+                <StackPanel Grid.Row="3" Margin="12,0" Spacing="6">
+                    <TextBlock Text="Твой мир. Твои сборки." FontSize="11" Classes="muted"/>
+                    <TextBlock Text="NexLauncher · 0.1" FontSize="11" Foreground="#78828D"/>
+                </StackPanel>
+            </Grid>
         </Border>
-
-        <!-- Основная часть -->
-        <Grid Grid.Column="1">
-
-            <StackPanel
-                HorizontalAlignment="Center"
-                VerticalAlignment="Center"
-                Spacing="20">
-
-                <TextBlock
-                    Text="Welcome to NexLauncher"
-                    FontSize="32"
-                    FontWeight="Bold"/>
-
-                <Button
-                    Width="220"
-                    Height="50">
-                    Play
-                </Button>
-
+        <Grid Grid.Column="1" RowDefinitions="Auto,*,Auto" Margin="32,24,32,20">
+            <Grid ColumnDefinitions="*,Auto" Margin="0,0,0,26">
+                <TextBlock Text="MINECRAFT: JAVA EDITION" FontSize="11" FontWeight="SemiBold"
+                           Foreground="#8F9AA5" VerticalAlignment="Center"/>
+                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
+                    <StackPanel VerticalAlignment="Center">
+                        <TextBlock Text="{Binding AccountName}" FontSize="13" MaxWidth="170" TextTrimming="CharacterEllipsis"/>
+                        <TextBlock Text="Microsoft-аккаунт" FontSize="10" Classes="muted" IsVisible="{Binding HasAccount}"/>
+                    </StackPanel>
+                    <Button Content="Войти" Command="{Binding SignInCommand}" IsVisible="{Binding HasNoAccount}" Padding="14,7"/>
+                    <Button Content="Выйти" Command="{Binding SignOutCommand}" IsVisible="{Binding HasAccount}" Padding="14,7"/>
+                </StackPanel>
+            </Grid>
+            <ScrollViewer Grid.Row="1" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+                <StackPanel Spacing="18" Margin="0,0,4,16">
+                    <StackPanel IsVisible="{Binding IsPlayPage}" Spacing="22">
+                        <StackPanel Spacing="8">
+                            <TextBlock Text="{Binding HeroTitle}" Classes="title"/>
+                            <TextBlock Text="Один шаг до следующего приключения." Classes="muted"/>
+                        </StackPanel>
+                        <StackPanel Spacing="8" IsVisible="{Binding HasInstance}">
+                            <TextBlock Text="Выбранная сборка" Classes="caption"/>
+                            <ComboBox ItemsSource="{Binding Instances}" SelectedItem="{Binding SelectedInstance}" IsEnabled="{Binding IsEditable}">
+                                <ComboBox.ItemTemplate>
+                                    <DataTemplate x:DataType="models:GameInstance">
+                                        <TextBlock Text="{Binding Name}"/>
+                                    </DataTemplate>
+                                </ComboBox.ItemTemplate>
+                            </ComboBox>
+                        </StackPanel>
+                        <Border Classes="card">
+                            <StackPanel Spacing="22">
+                                <Grid ColumnDefinitions="Auto,*">
+                                    <Border Width="56" Height="56" Background="#293D35" CornerRadius="12" Margin="0,0,16,0">
+                                        <PathIcon Width="28" Height="28" Foreground="#78D9B3"
+                                                  Data="M 10,0 L 20,5 L 10,10 L 0,5 Z M 0,7 L 9,12 L 9,23 L 0,18 Z M 11,12 L 20,7 L 20,18 L 11,23 Z"/>
+                                    </Border>
+                                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="5">
+                                        <TextBlock Text="{Binding InstanceTitle}" FontSize="21" FontWeight="SemiBold" TextWrapping="Wrap"/>
+                                        <TextBlock Text="{Binding InstanceDetails}" Classes="muted"/>
+                                    </StackPanel>
+                                </Grid>
+                                <Border Background="#3B4148" Height="1"/>
+                                <Grid ColumnDefinitions="*,Auto">
+                                    <StackPanel VerticalAlignment="Center" Spacing="5" Margin="0,0,14,0">
+                                        <TextBlock Text="{Binding InstallState}" FontWeight="Medium" IsVisible="{Binding HasInstance}"/>
+                                        <TextBlock Text="{Binding StatusText}" Classes="caption" TextWrapping="Wrap" MaxWidth="430" HorizontalAlignment="Left"/>
+                                        <Button Content="Открыть папку" Classes="quiet" Command="{Binding OpenFolderCommand}" IsVisible="{Binding HasInstance}"/>
+                                    </StackPanel>
+                                    <Button Grid.Column="1" Classes="primary" Content="{Binding PrimaryButtonText}" Command="{Binding PrimaryCommand}" VerticalAlignment="Center"/>
+                                </Grid>
+                            </StackPanel>
+                        </Border>
+                        <TextBlock Text="Версия, миры и настройки хранятся отдельно для каждой сборки."
+                                   Classes="caption" TextWrapping="Wrap"/>
+                        <Border Background="#202725" CornerRadius="10" Padding="18,15" IsVisible="{Binding HasNoAccount}">
+                            <StackPanel Spacing="5">
+                                <TextBlock Text="Сначала подготовь игру" FontWeight="Medium" Foreground="#C8E4D7"/>
+                                <TextBlock Text="Сборки и установка доступны без входа. Для запуска понадобится Microsoft-аккаунт с доступом к Java Edition."
+                                           TextWrapping="Wrap" Classes="caption"/>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+                    <StackPanel IsVisible="{Binding IsInstancesPage}" Spacing="22">
+                        <StackPanel Spacing="8">
+                            <TextBlock Text="Мои сборки" Classes="title"/>
+                            <TextBlock Text="Отдельное место для каждого мира." Classes="muted"/>
+                        </StackPanel>
+                        <ListBox ItemsSource="{Binding Instances}" SelectedItem="{Binding SelectedInstance}"
+                                 IsEnabled="{Binding IsEditable}" IsVisible="{Binding HasInstance}"
+                                 Background="Transparent" BorderThickness="0" MaxHeight="180">
+                            <ListBox.ItemTemplate>
+                                <DataTemplate x:DataType="models:GameInstance">
+                                    <Grid ColumnDefinitions="*,Auto" Margin="8,8">
+                                        <TextBlock Text="{Binding Name}" FontWeight="Medium" TextTrimming="CharacterEllipsis"/>
+                                        <TextBlock Grid.Column="1" Text="{Binding VersionId}" Classes="caption" Margin="16,0,0,0"/>
+                                    </Grid>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+                        <Border Classes="card">
+                            <StackPanel Spacing="16" IsEnabled="{Binding IsEditable}">
+                                <TextBlock Text="Создать сборку" FontSize="18" FontWeight="SemiBold"/>
+                                <StackPanel Spacing="7">
+                                    <TextBlock Text="Название" Classes="caption"/>
+                                    <TextBox Text="{Binding NewInstanceName}" MaxLength="60" PlaceholderText="Например, выживание с друзьями"/>
+                                </StackPanel>
+                                <StackPanel Spacing="7">
+                                    <Grid ColumnDefinitions="*,Auto">
+                                        <TextBlock Text="Версия Minecraft" Classes="caption" VerticalAlignment="Center"/>
+                                        <TextBlock Grid.Column="1" Text="{Binding VersionCount}" Classes="caption"/>
+                                    </Grid>
+                                    <ComboBox ItemsSource="{Binding Versions}" SelectedItem="{Binding SelectedVersion}" PlaceholderText="Выбери версию">
+                                        <ComboBox.ItemTemplate>
+                                            <DataTemplate x:DataType="models:MinecraftRelease">
+                                                <TextBlock Text="{Binding DisplayName}"/>
+                                            </DataTemplate>
+                                        </ComboBox.ItemTemplate>
+                                    </ComboBox>
+                                    <Grid ColumnDefinitions="*,Auto">
+                                        <CheckBox Content="Показывать снапшоты" IsChecked="{Binding IncludeSnapshots}" FontSize="12"/>
+                                        <Button Grid.Column="1" Content="Обновить" Classes="quiet" Command="{Binding RefreshVersionsCommand}"/>
+                                    </Grid>
+                                </StackPanel>
+                                <TextBlock Text="Vanilla · без модов" Classes="caption"/>
+                                <Button Content="Создать сборку" Classes="primary" Command="{Binding CreateInstanceCommand}" HorizontalAlignment="Right"/>
+                            </StackPanel>
+                        </Border>
+                        <Button Content="Перейти к игре" Command="{Binding NavigateCommand}" CommandParameter="play" IsVisible="{Binding HasInstance}" HorizontalAlignment="Left"/>
+                    </StackPanel>
+                    <StackPanel IsVisible="{Binding IsSettingsPage}" Spacing="22">
+                        <StackPanel Spacing="8">
+                            <TextBlock Text="Настройки" Classes="title"/>
+                            <TextBlock Text="Всё нужное для комфортной игры." Classes="muted"/>
+                        </StackPanel>
+                        <Border Classes="card" IsVisible="{Binding HasInstance}">
+                            <StackPanel Spacing="18" IsEnabled="{Binding IsEditable}">
+                                <TextBlock Text="{Binding InstanceTitle}" FontSize="18" FontWeight="SemiBold"/>
+                                <StackPanel Spacing="6">
+                                    <Grid ColumnDefinitions="*,Auto">
+                                        <TextBlock Text="Оперативная память"/>
+                                        <TextBlock Grid.Column="1" Text="{Binding MemoryLabel}" Foreground="#78D9B3"/>
+                                    </Grid>
+                                    <Slider Minimum="1" Maximum="32" TickFrequency="1" IsSnapToTickEnabled="True" Value="{Binding MemoryGb}"/>
+                                    <TextBlock Text="Для Vanilla начни с 4 ГБ. Оставь память для системы и других приложений." Classes="caption" TextWrapping="Wrap"/>
+                                </StackPanel>
+                                <StackPanel Spacing="7">
+                                    <TextBlock Text="Java"/>
+                                    <TextBox Text="{Binding JavaPath}" PlaceholderText="Автоматически — оставь поле пустым"/>
+                                    <TextBlock Text="Если нужна своя Java, укажи полный путь к java или javaw." Classes="caption" TextWrapping="Wrap"/>
+                                </StackPanel>
+                            </StackPanel>
+                        </Border>
+                        <Border Classes="card">
+                            <StackPanel Spacing="14">
+                                <TextBlock Text="Подключение Microsoft" FontSize="18" FontWeight="SemiBold"/>
+                                <TextBlock Text="Вход открывается в браузере. Пароль вводится только на сайте Microsoft."
+                                           Classes="muted" TextWrapping="Wrap"/>
+                                <Expander Header="Настройка входа для своего лаунчера" IsExpanded="True" HorizontalAlignment="Stretch">
+                                    <StackPanel Spacing="10" Margin="0,12,0,0" IsEnabled="{Binding IsEditable}">
+                                        <TextBlock Text="Application (client) ID" Classes="caption"/>
+                                        <TextBox Text="{Binding ClientId}" PlaceholderText="00000000-0000-0000-0000-000000000000"/>
+                                        <TextBlock Text="Нужен ID зарегистрированного приложения с доступом к Minecraft API. Client Secret не нужен."
+                                                   Classes="caption" TextWrapping="Wrap"/>
+                                        <Button Content="Как настроить приложение" Classes="quiet" Command="{Binding OpenAuthGuideCommand}"/>
+                                    </StackPanel>
+                                </Expander>
+                                <TextBlock Text="В этой версии вход сохраняется до закрытия лаунчера." Classes="caption" TextWrapping="Wrap"/>
+                            </StackPanel>
+                        </Border>
+                        <Button Content="Сохранить настройки" Classes="primary" Command="{Binding SaveSettingsCommand}" HorizontalAlignment="Right"/>
+                        <StackPanel Spacing="5">
+                            <TextBlock Text="Папка данных" Classes="caption"/>
+                            <TextBlock Text="{Binding DataDirectory}" FontSize="12" Foreground="#7F8A95" TextWrapping="Wrap"/>
+                        </StackPanel>
+                    </StackPanel>
+                    <TextBlock Text="{Binding Notice}" IsVisible="{Binding HasNotice}" Foreground="#A6CFBB" TextWrapping="Wrap"/>
+                    <Border Classes="card" IsVisible="{Binding ShowLog}">
+                        <StackPanel Spacing="10">
+                            <Grid ColumnDefinitions="*,Auto">
+                                <TextBlock Text="Журнал запуска" FontWeight="Medium" VerticalAlignment="Center"/>
+                                <Button Grid.Column="1" Content="Открыть файл" Classes="quiet" Command="{Binding OpenLogCommand}"/>
+                            </Grid>
+                            <TextBox Text="{Binding LogText}" IsReadOnly="True" AcceptsReturn="True"
+                                     TextWrapping="Wrap" Height="180" FontFamily="Consolas, monospace" FontSize="11"/>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+            </ScrollViewer>
+            <StackPanel Grid.Row="2" Spacing="10" Margin="0,12,0,0">
+                <Border Background="#3A262A" BorderBrush="#75414A" BorderThickness="1" CornerRadius="10" Padding="14" IsVisible="{Binding HasError}">
+                    <StackPanel Spacing="8">
+                        <TextBlock Text="{Binding ErrorMessage}" TextWrapping="Wrap" MaxLines="4" TextTrimming="WordEllipsis" Foreground="#F2C9CE"/>
+                        <StackPanel Orientation="Horizontal" Spacing="12">
+                            <Button Content="Показать журнал" Command="{Binding ToggleLogCommand}"/>
+                            <Button Content="Скрыть" Command="{Binding DismissErrorCommand}"/>
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+                <StackPanel Spacing="6" IsVisible="{Binding ShowProgress}">
+                    <Grid ColumnDefinitions="*,Auto">
+                        <TextBlock Text="{Binding StatusText}" Classes="caption" TextWrapping="Wrap" MaxLines="2" VerticalAlignment="Center" Margin="0,0,12,0"/>
+                        <Button Grid.Column="1" Content="Отменить" Classes="quiet" Command="{Binding CancelCommand}"/>
+                    </Grid>
+                    <ProgressBar Minimum="0" Maximum="100" Value="{Binding ProgressValue}" IsIndeterminate="{Binding IsProgressIndeterminate}"/>
+                </StackPanel>
+                <Grid ColumnDefinitions="*,Auto">
+                    <TextBlock Text="Независимый лаунчер · не связан с Mojang или Microsoft"
+                               FontSize="10" Foreground="#7F8A95" VerticalAlignment="Center" TextWrapping="Wrap"/>
+                    <Button Grid.Column="1" Content="Журнал" Classes="quiet" Command="{Binding ToggleLogCommand}" FontSize="12" Margin="12,0,0,0"/>
+                </Grid>
             </StackPanel>
-
         </Grid>
-
     </Grid>
-
 </Window>
