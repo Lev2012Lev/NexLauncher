@@ -103,7 +103,8 @@ public sealed class ConfigurationStore
         var result = new LauncherConfiguration
         {
             MicrosoftClientId = clientId,
-            ShowSnapshots = source.ShowSnapshots
+            ShowSnapshots = source.ShowSnapshots,
+            QuickCss = CopyQuickCss(source.QuickCss)
         };
         var ids = new HashSet<string>(StringComparer.Ordinal);
         foreach (var instance in source.Instances)
@@ -141,6 +142,16 @@ public sealed class ConfigurationStore
             ? selectedId
             : result.Instances.Count > 0 ? result.Instances[0].Id : null;
         return result;
+    }
+
+    private static QuickCssSettings CopyQuickCss(QuickCssSettings? source)
+    {
+        source ??= new();
+        var path = source.FilePath?.Trim() ?? "";
+        if (path.Length > 2048 || (path.Length > 0 &&
+            (!Path.IsPathFullyQualified(path) || path.IndexOfAny(Path.GetInvalidPathChars()) >= 0)))
+            throw new InvalidDataException("Quick CSS: укажи полный путь к файлу.");
+        return new QuickCssSettings { Enabled = source.Enabled, FilePath = path, AutoReload = source.AutoReload };
     }
 
     private static bool IsValidVersionId(string value)

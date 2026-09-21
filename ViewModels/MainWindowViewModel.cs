@@ -19,11 +19,10 @@ public partial class MainWindowViewModel : ObservableObject
 {
     private readonly ConfigurationStore _store;
     private readonly IMinecraftService _minecraft;
-    private readonly IAccountService _accounts;
+
     private readonly LauncherLog _log;
     private IReadOnlyList<MinecraftRelease> _allVersions = Array.Empty<MinecraftRelease>();
     private LauncherConfiguration _configuration = new();
-    private MSession? _session;
     private CancellationTokenSource? _operation;
     private bool _initialized;
     private bool _loadingSelection;
@@ -40,7 +39,7 @@ public partial class MainWindowViewModel : ObservableObject
     [ObservableProperty] private string _statusText = "Выбери версию и создай свою первую сборку.";
     [ObservableProperty] private string _errorMessage = "";
     [ObservableProperty] private string _notice = "";
-    [ObservableProperty] private string _clientId = "";
+
     [ObservableProperty] private string _javaPath = "";
     [ObservableProperty] private int _memoryGb = 4;
     [ObservableProperty] private bool _includeSnapshots;
@@ -59,13 +58,13 @@ public partial class MainWindowViewModel : ObservableObject
     public bool HasNoInstances => Instances.Count == 0;
     public bool HasError => !string.IsNullOrWhiteSpace(ErrorMessage);
     public bool HasNotice => !string.IsNullOrWhiteSpace(Notice);
-    public bool HasAccount => _session is not null;
+    public bool HasAccount => Accounts.HasAccount;
     public bool HasNoAccount => !HasAccount;
-    public bool IsEditable => !IsWorking && !IsLoadingVersions && !IsGameRunning && _configurationAvailable;
+    public bool IsEditable => !IsWorking && !IsLoadingVersions && !IsGameRunning && _configurationAvailable && QuickCss?.IsBusy != true;
     public bool CanCancel => IsWorking && !IsGameRunning && _operation is not null;
     public bool ShowProgress => IsWorking && !IsGameRunning && _operation is not null;
     public bool IsInstalled => SelectedInstance is not null && _minecraft.IsInstalled(SelectedInstance);
-    public string AccountName => _accounts.PlayerName ?? "Без аккаунта";
+    public string AccountName => Accounts.Username;
     public string InstanceTitle => SelectedInstance?.Name ?? "Твоя первая сборка";
     public string InstanceDetails => SelectedInstance is null ? "Minecraft: Java Edition" : $"Minecraft {SelectedInstance.VersionId} · Vanilla";
     public string InstallState => IsGameRunning ? "Игра запущена" : IsInstalled ? "Установлено" : "Нужна установка";
@@ -84,19 +83,24 @@ public partial class MainWindowViewModel : ObservableObject
     public IRelayCommand ToggleLogCommand { get; }
     public IRelayCommand OpenFolderCommand { get; }
     public IRelayCommand OpenLogCommand { get; }
-    public IRelayCommand OpenAuthGuideCommand { get; }
+    public AccountsViewModel Accounts { get; }
+    public QuickCssViewModel QuickCss { get; }
     public IAsyncRelayCommand RefreshVersionsCommand { get; }
     public IAsyncRelayCommand CreateInstanceCommand { get; }
     public IAsyncRelayCommand PrimaryCommand { get; }
     public IAsyncRelayCommand SignInCommand { get; }
-    public IAsyncRelayCommand SignOutCommand { get; }
     public IAsyncRelayCommand SaveSettingsCommand { get; }
 
     public MainWindowViewModel(ConfigurationStore store, IMinecraftService minecraft, IAccountService accounts)
     {
         _store = store;
         _minecraft = minecraft;
-        _accounts = accounts;
+        Accounts = new AccountsViewModel(accounts, RunAccountOperationAsync, () => IsEditable, RefreshState);
+        QuickCss = new QuickCssViewModel(store.DataDirectory, SaveQuickCssAsync, () => IsEditable);
+        QuickCss.PropertyChanged += (_, args) =>
+        {
+            if (args.PropertyName == nameof(QuickCssViewModel.IsBusy)) RefreshState();
+        };
         _log = new LauncherLog(store.DataDirectory);
         NavigateCommand = new RelayCommand<string>(page =>
         {
@@ -107,12 +111,10 @@ public partial class MainWindowViewModel : ObservableObject
         ToggleLogCommand = new RelayCommand(() => ShowLog = !ShowLog);
         OpenFolderCommand = new RelayCommand(() => OpenPath(GameDirectory, true), () => HasInstance);
         OpenLogCommand = new RelayCommand(() => { _log.Write("Открытие журнала."); OpenPath(_log.FilePath, false); });
-        OpenAuthGuideCommand = new RelayCommand(() => OpenPath("https://cmllib.github.io/CmlLib.Core-wiki/en/auth.microsoft/xboxauthnet.game.msal/clientid/", false));
         RefreshVersionsCommand = new AsyncRelayCommand(RefreshVersionsAsync, () => IsEditable);
         CreateInstanceCommand = new AsyncRelayCommand(CreateInstanceAsync, () => IsEditable && SelectedVersion is not null && !string.IsNullOrWhiteSpace(NewInstanceName));
         PrimaryCommand = new AsyncRelayCommand(InstallOrPlayAsync, () => IsEditable);
-        SignInCommand = new AsyncRelayCommand(SignInAsync, () => IsEditable && !HasAccount);
-        SignOutCommand = new AsyncRelayCommand(SignOutAsync, () => IsEditable && HasAccount);
+        SignInCommand = Accounts.AddCommand;
         SaveSettingsCommand = new AsyncRelayCommand(SaveSettingsAsync, () => IsEditable);
     }
 
@@ -124,7 +126,7 @@ public partial class MainWindowViewModel : ObservableObject
         {
             _loadingConfiguration = true;
             _configuration = await _store.LoadAsync();
-            ClientId = _configuration.MicrosoftClientId;
+            await QuickCss.InitializeAsync(_configuration.QuickCss);
             IncludeSnapshots = _configuration.ShowSnapshots;
             foreach (var instance in _configuration.Instances) Instances.Add(instance);
             SelectedInstance = Instances.FirstOrDefault(x => x.Id == _configuration.SelectedInstanceId) ?? Instances.FirstOrDefault();
@@ -136,6 +138,13 @@ public partial class MainWindowViewModel : ObservableObject
         }
         RefreshState();
         _loadingConfiguration = false;
+        try { await Accounts.InitializeAsync(); }
+        catch (Exception ex)
+        {
+            Accounts.SetError(ex.Message);
+            // Authentication errors are sanitized by the service; never log credential objects.
+            ErrorMessage = "Не удалось загрузить аккаунты. " + ex.Message;
+        }
         if (_configurationAvailable) await RefreshVersionsAsync();
     }
 
@@ -180,8 +189,9 @@ public partial class MainWindowViewModel : ObservableObject
         CreateInstanceCommand?.NotifyCanExecuteChanged();
         PrimaryCommand?.NotifyCanExecuteChanged();
         SignInCommand?.NotifyCanExecuteChanged();
-        SignOutCommand?.NotifyCanExecuteChanged();
         SaveSettingsCommand?.NotifyCanExecuteChanged();
+        Accounts?.RefreshCommands();
+        QuickCss?.RefreshCommands();
     }
 
     private void FilterVersions()
@@ -266,51 +276,21 @@ public partial class MainWindowViewModel : ObservableObject
                 Notice = HasAccount ? "Можно нажимать «Играть»." : "Для запуска войди в Microsoft-аккаунт с Minecraft: Java Edition.";
                 return;
             }
-            if (!await EnsureAccountAsync(token)) return;
+            var session = await GetAccountSessionAsync(token);
+            if (session is null) return;
             StatusText = "Проверяем файлы и готовим Java…";
-            var exitCode = await _minecraft.LaunchAsync(instance, _session!, CreateProgress(), AppendLog, token);
+            var exitCode = await _minecraft.LaunchAsync(instance, session, CreateProgress(), AppendLog, token);
             StatusText = exitCode == 0 ? "Игра закрыта. Можно запускать снова." : $"Игра завершилась с кодом {exitCode}.";
             if (exitCode != 0) ErrorMessage = "Minecraft завершился с ошибкой. Открой журнал, чтобы посмотреть причину.";
         });
     }
 
-    private async Task SignInAsync()
+    private async Task<MSession?> GetAccountSessionAsync(CancellationToken token)
     {
-        if (!IsEditable) return;
-        await RunOperationAsync(async token =>
-        {
-            if (await EnsureAccountAsync(token)) Notice = $"Вход выполнен: {AccountName}.";
-        });
-    }
-
-    private async Task<bool> EnsureAccountAsync(CancellationToken token)
-    {
-        var clientId = _configuration.MicrosoftClientId;
-        if (!Guid.TryParse(clientId, out var parsedClientId) || parsedClientId == Guid.Empty)
-        {
-            CurrentPage = "settings";
-            ErrorMessage = "Сначала настрой Microsoft-вход: укажи и сохрани Client ID своего приложения в разделе «Подключение Microsoft».";
-            StatusText = "Нужна настройка входа.";
-            return false;
-        }
-        await PersistAsync(token);
-        StatusText = "Вход в Microsoft через браузер…";
-        _session = await _accounts.RestoreAsync(clientId, token);
-        _session ??= await _accounts.SignInAsync(clientId, token);
+        StatusText = "Проверяем аккаунт Minecraft…";
+        var session = await Accounts.GetSessionAsync(token);
         RefreshState();
-        return _session is not null;
-    }
-
-    private async Task SignOutAsync()
-    {
-        if (!IsEditable) return;
-        await RunOperationAsync(async _ =>
-        {
-            await _accounts.SignOutAsync();
-            _session = null;
-            Notice = "Выход выполнен.";
-            RefreshState();
-        });
+        return session;
     }
 
     private IProgress<LaunchProgress> CreateProgress()
@@ -334,6 +314,12 @@ public partial class MainWindowViewModel : ObservableObject
             else Dispatcher.UIThread.Post(() => report(value));
         }
     }
+    private Task RunAccountOperationAsync(Func<CancellationToken, Task> action)
+    {
+        StatusText = "Аккаунты Microsoft…";
+        return RunOperationAsync(action);
+    }
+
     private async Task RunOperationAsync(Func<CancellationToken, Task> action)
     {
         if (IsWorking) return;
@@ -348,7 +334,8 @@ public partial class MainWindowViewModel : ObservableObject
         catch (OperationCanceledException)
         {
             StatusText = "Операция отменена.";
-            Notice = "При повторной установке недостающие файлы будут докачаны.";
+            Notice = "Можно повторить действие.";
+            Accounts.SetError("Операция отменена.");
         }
         catch (Exception ex) { ShowError(ex, "Не удалось завершить действие."); StatusText = "Нужна помощь — смотри сообщение ниже."; }
         finally { _operation = null; IsGameRunning = false; IsWorking = false; RefreshState(); }
@@ -369,16 +356,10 @@ public partial class MainWindowViewModel : ObservableObject
             ErrorMessage = "Укажи полный путь к существующему java или javaw, либо оставь поле пустым.";
             return;
         }
-        var id = ClientId.Trim();
-        if (id.Length > 0 && (!Guid.TryParse(id, out var parsed) || parsed == Guid.Empty))
-        {
-            ErrorMessage = "Client ID должен быть непустым GUID. Пароль и Client Secret здесь не нужны.";
-            return;
-        }
         var instance = SelectedInstance;
         var oldMemory = instance?.MemoryMb ?? 4096;
         var oldJava = instance?.JavaPath ?? "";
-        var oldClientId = _configuration.MicrosoftClientId;
+
         IsWorking = true;
         try
         {
@@ -387,13 +368,8 @@ public partial class MainWindowViewModel : ObservableObject
                 instance.MemoryMb = MemoryGb * 1024;
                 instance.JavaPath = java;
             }
-            _configuration.MicrosoftClientId = id;
+
             await PersistAsync();
-            if (!string.Equals(oldClientId, id, StringComparison.OrdinalIgnoreCase))
-            {
-                await _accounts.SignOutAsync();
-                _session = null;
-            }
             Notice = "Настройки сохранены.";
         }
         catch (Exception ex)
@@ -403,11 +379,25 @@ public partial class MainWindowViewModel : ObservableObject
                 instance.MemoryMb = oldMemory;
                 instance.JavaPath = oldJava;
             }
-            _configuration.MicrosoftClientId = oldClientId;
+
             ShowError(ex, "Не удалось сохранить настройки.");
         }
         finally { IsWorking = false; RefreshState(); }
     }
+    private async Task SaveQuickCssAsync(QuickCssSettings settings)
+    {
+        var previous = _configuration.QuickCss;
+        _configuration.QuickCss = settings;
+        try { await PersistAsync(); }
+        catch { _configuration.QuickCss = previous; throw; }
+    }
+
+    public void Dispose()
+    {
+        QuickCss.Dispose();
+        Accounts.Dispose();
+    }
+
     private Task PersistAsync(CancellationToken cancellationToken = default)
     {
         if (!_configurationAvailable) throw new InvalidOperationException("Настройки повреждены. Исходный файл оставлен без изменений.");

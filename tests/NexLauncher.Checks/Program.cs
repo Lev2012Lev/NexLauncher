@@ -3,6 +3,8 @@ using Avalonia.Controls;
 using Avalonia.Headless;
 using Avalonia.Media.Imaging;
 using Avalonia.Threading;
+using Avalonia.VisualTree;
+using Avalonia.Media;
 using CmlLib.Core.Auth;
 using NexLauncher;
 using NexLauncher.Models;
@@ -28,6 +30,9 @@ internal static class Program
         {
             try
             {
+                QuickCssParserChecks.Run(Check);
+                await QuickCssRuntimeChecks.RunAsync(Root, Check);
+                await AuthenticationChecks.RunAsync(Root, Check);
                 await CheckStorage();
                 await CheckViewModel();
                 await CheckBackendGuards();
@@ -112,14 +117,36 @@ internal static class Program
         Check((await store.LoadAsync()).Instances.Single().VersionId == "1.21.1", "profile pins concrete version");
         await vm.PrimaryCommand.ExecuteAsync(null);
         Check(game.InstallCalls == 1 && accounts.SignInCalls == 0 && vm.IsInstalled, "installation works without account");
-        await vm.PrimaryCommand.ExecuteAsync(null);
-        Check(game.LaunchCalls == 0 && vm.CurrentPage == "settings" && vm.HasError, "launch requires configured Microsoft login");
-        vm.ClientId = Guid.NewGuid().ToString();
+
         vm.MemoryGb = 6;
         await vm.SaveSettingsCommand.ExecuteAsync(null);
         Check((await store.LoadAsync()).Instances.Single().MemoryMb == 6144, "saved RAM reaches profile");
         await vm.PrimaryCommand.ExecuteAsync(null);
         Check(game.LaunchCalls == 1 && accounts.SignInCalls == 1 && vm.HasAccount && !vm.IsWorking, "authorized launch and exit reset UI");
+
+        var firstAccountId = accounts.ActiveAccountId;
+        await vm.Accounts.AddCommand.ExecuteAsync(null);
+        Check(vm.Accounts.Items.Count == 2 && vm.AccountName == "TestPlayer2", "adding a second account updates account UI");
+        vm.Accounts.SelectedAccount = vm.Accounts.Items.First(x => x.Id == firstAccountId);
+        await vm.Accounts.ActivateCommand.ExecuteAsync(null);
+        await vm.PrimaryCommand.ExecuteAsync(null);
+        Check(game.LastSessionUuid == firstAccountId && accounts.RestoreCalls >= 2,
+            "switching account refreshes and supplies its session to the existing launch service");
+        vm.Accounts.SelectedAccount = vm.Accounts.Items.First(x => x.Id != firstAccountId);
+        await vm.Accounts.RemoveCommand.ExecuteAsync(null);
+        Check(vm.Accounts.Items.Count == 1 && vm.HasAccount && vm.AccountName == "TestPlayer1",
+            "removing another account preserves active launch identity");
+        accounts.SignInStarted = false;
+        accounts.HoldSignIn = true;
+        var pendingSignIn = vm.Accounts.AddCommand.ExecuteAsync(null);
+        await Until(() => accounts.SignInStarted);
+        Check(vm.CancelCommand.CanExecute(null) && !vm.Accounts.RemoveCommand.CanExecute(null),
+            "interactive account operation exposes cancel and locks other account operations");
+        vm.CancelCommand.Execute(null);
+        await pendingSignIn;
+        accounts.HoldSignIn = false;
+        Check(vm.IsEditable && vm.Accounts.Items.Count == 1 && vm.Accounts.Status.Contains("отмен"),
+            "cancelled interactive login resets UI and preserves accounts");
 
         // A running game prevents a second launch or an edit; cancellation never kills it.
         game.HoldLaunch = true;
@@ -132,9 +159,8 @@ internal static class Program
         game.FinishLaunch.TrySetResult(0);
         await running;
         game.HoldLaunch = false;
-        var signOutCalls = accounts.SignOutCalls;
-        await vm.SignOutCommand.ExecuteAsync(null);
-        Check(!vm.HasAccount && accounts.SignOutCalls == signOutCalls + 1, "sign-out clears UI session");
+        await vm.Accounts.RemoveCommand.ExecuteAsync(null);
+        Check(!vm.HasAccount && vm.Accounts.Items.Count == 0, "sign-out clears UI account");
 
         vm.NewInstanceName = "Вторая сборка";
         await vm.CreateInstanceCommand.ExecuteAsync(null);
@@ -182,9 +208,8 @@ internal static class Program
         using var auth = new CancellationTokenSource();
         auth.Cancel();
         await Rejects<OperationCanceledException>(() => service.GetVersionsAsync(auth.Token), "catalogue honors cancellation");
-        var login = new MicrosoftAccountService();
-        Check(await login.RestoreAsync("", default) is null, "fresh login service has no persisted token");
-        await Rejects<InvalidOperationException>(() => login.SignInAsync("", default), "missing client ID rejected before opening browser");
+        var login = new MicrosoftAccountService(Path.Combine(Root, "auth-empty"));
+        Check(await login.RestoreAsync(default) is null, "fresh login service has no persisted token");
         await login.SignOutAsync();
     }
 
@@ -214,6 +239,31 @@ internal static class Program
         Dispatcher.UIThread.RunJobs();
         using (var frame = window.CaptureRenderedFrame()) frame!.Save(Path.Combine(Root, "settings-minimum.png"), PngBitmapEncoderOptions.Default);
         Check(window.DataContext == vm && window.Bounds.Width >= 900, "window uses bound viewmodel at minimum size");
+        await vm.QuickCss.CreateExampleCommand.ExecuteAsync(null);
+        Dispatcher.UIThread.RunJobs();
+        Check(vm.QuickCss.Enabled && File.Exists(vm.QuickCss.FilePath) && !vm.QuickCss.HasDiagnostics,
+            "example theme creates, saves and applies from Settings without diagnostics: " + vm.QuickCss.Diagnostics);
+        Check((await store.LoadAsync()).QuickCss.Enabled, "Quick CSS settings use the existing config store");
+        vm.CurrentPage = "play";
+        window.Width = 1060; window.Height = 760;
+        Dispatcher.UIThread.RunJobs();
+        using (var frame = window.CaptureRenderedFrame()) frame!.Save(Path.Combine(Root, "quickcss-play.png"), PngBitmapEncoderOptions.Default);
+        var sidebar = window.GetVisualDescendants().OfType<Border>().Single(x => x.Classes.Contains("qc-sidebar"));
+        Check((sidebar.Background as ISolidColorBrush)?.Color == Color.Parse("#191422"), "example visibly changes sidebar surface");
+        Check((window.Background as ISolidColorBrush)?.Color == Color.Parse("#211c2f"), "example styles the root window");
+        vm.CurrentPage = "settings";
+        Dispatcher.UIThread.RunJobs();
+        var scroll = window.GetVisualDescendants().OfType<ScrollViewer>().First(x => x.Content is StackPanel);
+        scroll.Offset = new Avalonia.Vector(0, scroll.Extent.Height);
+        Dispatcher.UIThread.RunJobs();
+        using (var frame = window.CaptureRenderedFrame()) frame!.Save(Path.Combine(Root, "quickcss-settings.png"), PngBitmapEncoderOptions.Default);
+        vm.QuickCss.Enabled = false;
+        await vm.QuickCss.ApplyCommand.ExecuteAsync(null);
+        Dispatcher.UIThread.RunJobs();
+        Check((sidebar.Background as ISolidColorBrush)?.Color == Color.Parse("#202225") &&
+              (window.Background as ISolidColorBrush)?.Color == Color.Parse("#181A1D"),
+            "disabling Quick CSS restores original surfaces");
+        Check(!(await store.LoadAsync()).QuickCss.Enabled, "disabling Quick CSS persists");
         window.Close();
     }
 
@@ -268,6 +318,7 @@ internal sealed class FakeMinecraft : IMinecraftService
 {
     public readonly HashSet<string> Installed = new();
     public int InstallCalls, LaunchCalls;
+    public string? LastSessionUuid;
     public bool HoldInstall, InstallStarted, HoldLaunch;
     public CancellationToken LaunchToken;
     public TaskCompletionSource<int> FinishLaunch = new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -289,6 +340,7 @@ internal sealed class FakeMinecraft : IMinecraftService
     public async Task<int> LaunchAsync(GameInstance instance, MSession session, IProgress<LaunchProgress> progress, Action<string> log, CancellationToken token)
     {
         LaunchCalls++;
+        LastSessionUuid = session.UUID;
         LaunchToken = token;
         progress.Report(new LaunchProgress("Игра запущена", null, true));
         log("Test game started.");
@@ -298,15 +350,38 @@ internal sealed class FakeMinecraft : IMinecraftService
 
 internal sealed class FakeAccounts : IAccountService
 {
-    public int SignInCalls, SignOutCalls;
-    private MSession? _session;
-    public string? PlayerName => _session?.Username;
-    public Task<MSession> SignInAsync(string id, CancellationToken token)
+    public int SignInCalls, SignOutCalls, RestoreCalls;
+    public bool HoldSignIn, SignInStarted;
+    private readonly List<LauncherAccount> _accounts = new();
+    public IReadOnlyList<LauncherAccount> Accounts => _accounts;
+    public string? ActiveAccountId { get; private set; }
+    public string? PlayerName => _accounts.FirstOrDefault(x => x.Id == ActiveAccountId)?.Username;
+    public Task InitializeAsync(CancellationToken token) => Task.CompletedTask;
+    public async Task<MSession> SignInAsync(CancellationToken token)
     {
+        token.ThrowIfCancellationRequested();
+        SignInStarted = true;
+        if (HoldSignIn) await Task.Delay(Timeout.Infinite, token);
         SignInCalls++;
-        _session = new MSession("TestPlayer", "test-access-token", Guid.NewGuid().ToString("N")) { UserType = "msa" };
-        return Task.FromResult(_session);
+        var id = Guid.NewGuid().ToString("N");
+        _accounts.Add(new LauncherAccount(id, "TestPlayer" + SignInCalls, id, null));
+        ActiveAccountId = id;
+        return Session();
     }
-    public Task<MSession?> RestoreAsync(string id, CancellationToken token) => Task.FromResult(_session);
-    public Task SignOutAsync() { SignOutCalls++; _session = null; return Task.CompletedTask; }
+    private MSession Session() => new(PlayerName!, "test-access-token", ActiveAccountId!) { UserType = "msa" };
+    public Task<MSession?> RestoreAsync(CancellationToken token)
+    {
+        token.ThrowIfCancellationRequested();
+        RestoreCalls++;
+        return Task.FromResult<MSession?>(ActiveAccountId is null ? null : Session());
+    }
+    public Task SelectAccountAsync(string id, CancellationToken token) { token.ThrowIfCancellationRequested(); ActiveAccountId = id; return Task.CompletedTask; }
+    public Task RemoveAccountAsync(string id, CancellationToken token)
+    {
+        token.ThrowIfCancellationRequested();
+        _accounts.RemoveAll(x => x.Id == id);
+        if (ActiveAccountId == id) ActiveAccountId = _accounts.FirstOrDefault()?.Id;
+        return Task.CompletedTask;
+    }
+    public Task SignOutAsync() { SignOutCalls++; return ActiveAccountId is null ? Task.CompletedTask : RemoveAccountAsync(ActiveAccountId, default); }
 }

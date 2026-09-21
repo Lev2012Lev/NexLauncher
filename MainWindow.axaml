@@ -5,14 +5,14 @@
         x:Class="NexLauncher.MainWindow"
         x:DataType="vm:MainWindowViewModel"
         x:CompileBindings="True"
-        Title="NexLauncher"
+        Classes="qc-app" Title="NexLauncher"
         Width="1060" Height="760" MinWidth="900" MinHeight="650"
         WindowStartupLocation="CenterScreen">
     <Grid ColumnDefinitions="196,*">
-        <Border Background="#202225" BorderBrush="#30343A" BorderThickness="0,0,1,0">
+        <Border Classes="qc-sidebar">
             <Grid RowDefinitions="Auto,Auto,*,Auto" Margin="14,28,14,20">
                 <StackPanel Orientation="Horizontal" Spacing="10" Margin="9,0,0,32">
-                    <Border Width="30" Height="30" CornerRadius="8" Background="#78D9B3">
+                    <Border Width="30" Height="30" CornerRadius="8" Background="{DynamicResource NxAccentBrush}">
                         <TextBlock Text="N" FontSize="18" FontWeight="Bold" Foreground="#103429"
                                    HorizontalAlignment="Center" VerticalAlignment="Center"/>
                     </Border>
@@ -44,18 +44,26 @@
                 </StackPanel>
             </Grid>
         </Border>
-        <Grid Grid.Column="1" RowDefinitions="Auto,*,Auto" Margin="32,24,32,20">
+        <Grid Classes="qc-content" Grid.Column="1" RowDefinitions="Auto,*,Auto">
             <Grid ColumnDefinitions="*,Auto" Margin="0,0,0,26">
                 <TextBlock Text="MINECRAFT: JAVA EDITION" FontSize="11" FontWeight="SemiBold"
                            Foreground="#8F9AA5" VerticalAlignment="Center"/>
-                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
-                    <StackPanel VerticalAlignment="Center">
-                        <TextBlock Text="{Binding AccountName}" FontSize="13" MaxWidth="170" TextTrimming="CharacterEllipsis"/>
-                        <TextBlock Text="Microsoft-аккаунт" FontSize="10" Classes="muted" IsVisible="{Binding HasAccount}"/>
+                <Border Grid.Column="1" Classes="qc-account-panel">
+                    <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
+                        <Border Width="32" Height="32" CornerRadius="8" Background="{DynamicResource NxAccentBrush}" ClipToBounds="True">
+                            <Grid>
+                                <TextBlock Text="{Binding Accounts.Initial}" IsVisible="{Binding Accounts.HasNoAvatar}" Foreground="#103429" HorizontalAlignment="Center" VerticalAlignment="Center" FontWeight="Bold"/>
+                                <Image Source="{Binding Accounts.Avatar}" IsVisible="{Binding Accounts.HasAvatar}" Stretch="Fill" RenderOptions.BitmapInterpolationMode="None"/>
+                            </Grid>
+                        </Border>
+                        <StackPanel VerticalAlignment="Center">
+                            <TextBlock Text="{Binding AccountName}" FontSize="13" MaxWidth="170" TextTrimming="CharacterEllipsis"/>
+                            <TextBlock Text="Microsoft · Java Edition" FontSize="10" Classes="muted" IsVisible="{Binding HasAccount}"/>
+                        </StackPanel>
+                        <Button Content="Войти" Command="{Binding SignInCommand}" IsVisible="{Binding HasNoAccount}"/>
+                        <Button Content="Аккаунты" Command="{Binding NavigateCommand}" CommandParameter="settings" IsVisible="{Binding HasAccount}"/>
                     </StackPanel>
-                    <Button Content="Войти" Command="{Binding SignInCommand}" IsVisible="{Binding HasNoAccount}" Padding="14,7"/>
-                    <Button Content="Выйти" Command="{Binding SignOutCommand}" IsVisible="{Binding HasAccount}" Padding="14,7"/>
-                </StackPanel>
+                </Border>
             </Grid>
             <ScrollViewer Grid.Row="1" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
                 <StackPanel Spacing="18" Margin="0,0,4,16">
@@ -74,11 +82,11 @@
                                 </ComboBox.ItemTemplate>
                             </ComboBox>
                         </StackPanel>
-                        <Border Classes="card">
+                        <Border Classes="card qc-instance-card">
                             <StackPanel Spacing="22">
                                 <Grid ColumnDefinitions="Auto,*">
                                     <Border Width="56" Height="56" Background="#293D35" CornerRadius="12" Margin="0,0,16,0">
-                                        <PathIcon Width="28" Height="28" Foreground="#78D9B3"
+                                        <PathIcon Width="28" Height="28" Foreground="{DynamicResource NxAccentBrush}"
                                                   Data="M 10,0 L 20,5 L 10,10 L 0,5 Z M 0,7 L 9,12 L 9,23 L 0,18 Z M 11,12 L 20,7 L 20,18 L 11,23 Z"/>
                                     </Border>
                                     <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="5">
@@ -93,7 +101,7 @@
                                         <TextBlock Text="{Binding StatusText}" Classes="caption" TextWrapping="Wrap" MaxWidth="430" HorizontalAlignment="Left"/>
                                         <Button Content="Открыть папку" Classes="quiet" Command="{Binding OpenFolderCommand}" IsVisible="{Binding HasInstance}"/>
                                     </StackPanel>
-                                    <Button Grid.Column="1" Classes="primary" Content="{Binding PrimaryButtonText}" Command="{Binding PrimaryCommand}" VerticalAlignment="Center"/>
+                                    <Button Grid.Column="1" Classes="primary qc-play-button" Content="{Binding PrimaryButtonText}" Command="{Binding PrimaryCommand}" VerticalAlignment="Center"/>
                                 </Grid>
                             </StackPanel>
                         </Border>
@@ -165,7 +173,7 @@
                                 <StackPanel Spacing="6">
                                     <Grid ColumnDefinitions="*,Auto">
                                         <TextBlock Text="Оперативная память"/>
-                                        <TextBlock Grid.Column="1" Text="{Binding MemoryLabel}" Foreground="#78D9B3"/>
+                                        <TextBlock Grid.Column="1" Text="{Binding MemoryLabel}" Foreground="{DynamicResource NxAccentBrush}"/>
                                     </Grid>
                                     <Slider Minimum="1" Maximum="32" TickFrequency="1" IsSnapToTickEnabled="True" Value="{Binding MemoryGb}"/>
                                     <TextBlock Text="Для Vanilla начни с 4 ГБ. Оставь память для системы и других приложений." Classes="caption" TextWrapping="Wrap"/>
@@ -178,20 +186,43 @@
                             </StackPanel>
                         </Border>
                         <Border Classes="card">
-                            <StackPanel Spacing="14">
-                                <TextBlock Text="Подключение Microsoft" FontSize="18" FontWeight="SemiBold"/>
-                                <TextBlock Text="Вход открывается в браузере. Пароль вводится только на сайте Microsoft."
-                                           Classes="muted" TextWrapping="Wrap"/>
-                                <Expander Header="Настройка входа для своего лаунчера" IsExpanded="True" HorizontalAlignment="Stretch">
-                                    <StackPanel Spacing="10" Margin="0,12,0,0" IsEnabled="{Binding IsEditable}">
-                                        <TextBlock Text="Application (client) ID" Classes="caption"/>
-                                        <TextBox Text="{Binding ClientId}" PlaceholderText="00000000-0000-0000-0000-000000000000"/>
-                                        <TextBlock Text="Нужен ID зарегистрированного приложения с доступом к Minecraft API. Client Secret не нужен."
-                                                   Classes="caption" TextWrapping="Wrap"/>
-                                        <Button Content="Как настроить приложение" Classes="quiet" Command="{Binding OpenAuthGuideCommand}"/>
-                                    </StackPanel>
-                                </Expander>
-                                <TextBlock Text="В этой версии вход сохраняется до закрытия лаунчера." Classes="caption" TextWrapping="Wrap"/>
+                            <StackPanel DataContext="{Binding Accounts}" x:DataType="vm:AccountsViewModel" Spacing="12">
+                                <TextBlock Text="Аккаунты Minecraft" FontSize="18" FontWeight="SemiBold"/>
+                                <TextBlock Text="{Binding Status}" Classes="muted" TextWrapping="Wrap"/>
+                                <ComboBox ItemsSource="{Binding Items}" SelectedItem="{Binding SelectedAccount}" IsVisible="{Binding HasAccount}">
+                                    <ComboBox.ItemTemplate>
+                                        <DataTemplate x:DataType="models:LauncherAccount">
+                                            <TextBlock Text="{Binding Username}"/>
+                                        </DataTemplate>
+                                    </ComboBox.ItemTemplate>
+                                </ComboBox>
+                                <WrapPanel Orientation="Horizontal">
+                                    <Button Content="Использовать" Command="{Binding ActivateCommand}" IsVisible="{Binding HasAccount}" Margin="0,0,8,8"/>
+                                    <Button Content="Добавить Microsoft" Command="{Binding AddCommand}" Margin="0,0,8,8"/>
+                                    <Button Content="Выйти / удалить" Command="{Binding RemoveCommand}" IsVisible="{Binding HasAccount}" Margin="0,0,0,8"/>
+                                </WrapPanel>
+                                <TextBlock Text="Пароль вводится только в окне Microsoft. В Windows аккаунты защищены для текущего пользователя." Classes="caption" TextWrapping="Wrap"/>
+                            </StackPanel>
+                        </Border>
+                        <Border Classes="card">
+                            <StackPanel DataContext="{Binding QuickCss}" x:DataType="vm:QuickCssViewModel" Spacing="12">
+                                <TextBlock Text="Quick CSS" FontSize="18" FontWeight="SemiBold"/>
+                                <TextBlock Text="Твоя тема поверх стандартного оформления. Цвета, фон, шрифты и детали интерфейса." Classes="muted" TextWrapping="Wrap"/>
+                                <CheckBox Content="Включить Quick CSS" IsChecked="{Binding Enabled}"/>
+                                <TextBox Text="{Binding FilePath}" PlaceholderText="Полный путь к .css файлу"/>
+                                <WrapPanel Orientation="Horizontal">
+                                    <Button Content="Выбрать файл" Command="{Binding BrowseCommand}" Margin="0,0,8,8"/>
+                                    <Button Content="Открыть в редакторе" Command="{Binding OpenCommand}" Margin="0,0,8,8"/>
+                                    <Button Content="Создать пример" Command="{Binding CreateExampleCommand}" Margin="0,0,0,8"/>
+                                </WrapPanel>
+                                <CheckBox Content="Обновлять после сохранения файла" IsChecked="{Binding AutoReload}"/>
+                                <TextBlock Text="«Применить» сохраняет выбранный файл и переключатели. «Перезагрузить» также перечитывает тему." Classes="caption" TextWrapping="Wrap"/>
+                                <WrapPanel Orientation="Horizontal">
+                                    <Button Content="Применить" Command="{Binding ApplyCommand}" Margin="0,0,8,8"/>
+                                    <Button Content="Перезагрузить" Command="{Binding ReloadCommand}" Margin="0,0,0,8"/>
+                                </WrapPanel>
+                                <TextBlock Text="{Binding Status}" Classes="muted" TextWrapping="Wrap"/>
+                                <TextBlock Text="{Binding Diagnostics}" IsVisible="{Binding HasDiagnostics}" Classes="caption" TextWrapping="Wrap"/>
                             </StackPanel>
                         </Border>
                         <Button Content="Сохранить настройки" Classes="primary" Command="{Binding SaveSettingsCommand}" HorizontalAlignment="Right"/>
@@ -201,7 +232,7 @@
                         </StackPanel>
                     </StackPanel>
                     <TextBlock Text="{Binding Notice}" IsVisible="{Binding HasNotice}" Foreground="#A6CFBB" TextWrapping="Wrap"/>
-                    <Border Classes="card" IsVisible="{Binding ShowLog}">
+                    <Border Classes="card qc-log-panel" IsVisible="{Binding ShowLog}">
                         <StackPanel Spacing="10">
                             <Grid ColumnDefinitions="*,Auto">
                                 <TextBlock Text="Журнал запуска" FontWeight="Medium" VerticalAlignment="Center"/>

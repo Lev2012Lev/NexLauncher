@@ -19,6 +19,7 @@
     <Import Project="$(NuGetPackageRoot)avalonia\12.1.0\buildTransitive\Avalonia.props" Condition="Exists('$(NuGetPackageRoot)avalonia\12.1.0\buildTransitive\Avalonia.props')" />
   </ImportGroup>
   <PropertyGroup Condition=" '$(ExcludeRestorePackageImports)' != 'true' ">
+    <PkgMicrosoft_Web_WebView2 Condition=" '$(PkgMicrosoft_Web_WebView2)' == '' ">C:\Users\nravi\.nuget\packages\microsoft.web.webview2\1.0.1823.32</PkgMicrosoft_Web_WebView2>
     <PkgAvalonia_BuildServices Condition=" '$(PkgAvalonia_BuildServices)' == '' ">C:\Users\nravi\.nuget\packages\avalonia.buildservices\11.3.2</PkgAvalonia_BuildServices>
     <PkgAvalonia Condition=" '$(PkgAvalonia)' == '' ">C:\Users\nravi\.nuget\packages\avalonia\12.1.0</PkgAvalonia>
   </PropertyGroup>

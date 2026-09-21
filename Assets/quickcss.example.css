@@ -1,0 +1,189 @@
+/*
+ * NexLauncher Quick CSS — Plum Evening
+ * A complete example theme. Edit tokens below, save, and press Reload.
+ * With Auto reload enabled, saving this CSS is enough.
+ * Reference: docs/QUICK_CSS.md. This is a small Avalonia subset, not browser CSS.
+ * Variables are ordinary user names: declaring one changes nothing until var() uses it.
+ */
+
+/* 1. Theme tokens: colors, typography and spacing. */
+:root {
+    --app-background: #211c2f;
+    --sidebar-background: #191422;
+    --surface: #30263e;
+    --surface-raised: #3b2e4a;
+    --input-background: #251e32;
+    --border: #554161;
+    --text: #f4e9df;
+    --text-muted: #c0adc9;
+    --accent: #edaac8;
+    --accent-hover: #ffd0e2;
+    --accent-text: #3b2035;
+    --selected-background: #563653;
+    --disabled-background: #3c3046;
+    --disabled-text: #a596af;
+    --corner: 14px;
+    --card-corner: 18px;
+    --body-size: 14px;
+    --heading-size: 27px;
+
+    background-color: var(--app-background);
+    color: var(--text);
+    accent-color: var(--accent);
+    font-size: var(--body-size);
+    /* Optional: uncomment only if this font is installed on your computer. */
+    /* font-family: "Segoe UI"; */
+}
+
+/* 2. Semantic surfaces. #content is a panel: no border or padding properties. */
+#sidebar {
+    background-color: var(--sidebar-background);
+    border-color: var(--border);
+}
+.card {
+    background-color: var(--surface);
+    border-color: var(--border);
+    border-width: 1px;
+    border-radius: var(--card-corner);
+    padding: 24px;
+}
+#instance-card {
+    background-color: #362a43;
+    border-color: #886081;
+}
+#account-panel {
+    background-color: var(--surface);
+    border-radius: var(--corner);
+    padding: 8px 12px;
+}
+#log-panel {
+    background-color: var(--input-background);
+}
+
+/* 3. Warm text against plum surfaces. Explicit text styles override inheritance. */
+text {
+    color: var(--text);
+}
+.title {
+    color: #ffe9dc;
+    font-size: var(--heading-size);
+    font-weight: 600;
+}
+.muted, .caption {
+    color: var(--text-muted);
+}
+.caption {
+    font-size: 12px;
+}
+
+/* 4. Controls: normal rules first; state rules later. */
+button {
+    background-color: var(--surface-raised);
+    color: var(--text);
+    border-color: var(--border);
+    border-width: 1px;
+    border-radius: var(--corner);
+    padding: 10px 16px;
+}
+button:hover {
+    background-color: #51405f;
+    border-color: var(--accent);
+}
+button:disabled {
+    background-color: var(--disabled-background);
+    color: var(--disabled-text);
+    border-color: var(--border);
+}
+textbox, combobox {
+    background-color: var(--input-background);
+    color: var(--text);
+    border-color: var(--border);
+    border-width: 1px;
+    border-radius: 10px;
+    padding: 10px 12px;
+}
+textbox:hover, combobox:hover {
+    border-color: var(--accent);
+}
+textbox:disabled, combobox:disabled {
+    opacity: 0.65;
+}
+
+/* 5. Navigation and main action override the generic button appearance. */
+.nav {
+    background-color: transparent;
+    color: var(--text-muted);
+    border-color: transparent;
+    padding: 12px 16px;
+}
+.nav:hover {
+    background-color: var(--surface);
+    color: var(--text);
+}
+.nav:selected {
+    background-color: var(--selected-background);
+    color: var(--accent-hover);
+    border-color: #95647f;
+    font-weight: 600;
+}
+.primary {
+    background-color: var(--accent);
+    color: var(--accent-text);
+    border-color: var(--accent);
+    border-radius: 16px;
+    font-weight: 700;
+}
+.primary:hover {
+    background-color: var(--accent-hover);
+    color: var(--accent-text);
+}
+.primary:disabled {
+    background-color: var(--disabled-background);
+    color: var(--disabled-text);
+    border-color: var(--border);
+}
+.quiet {
+    background-color: transparent;
+    color: var(--accent);
+    border-color: transparent;
+    padding: 8px 0;
+}
+.quiet:hover {
+    background-color: var(--surface-raised);
+    color: var(--accent-hover);
+}
+
+/*
+ * 6. Optional local background. Put a PNG/JPEG under the CSS folder, then
+ * uncomment this entire rule. Images are NOT downloaded from the internet.
+ * size/position/background-opacity belong in the same rule as background-image.
+ * Background image replaces the element's color brush; opacity affects only it.
+ * Re-save the CSS or press Reload after changing the image.
+ *
+ * #content {
+ *     background-image: url("images/forest.jpg");
+ *     background-size: cover;
+ *     background-position: center;
+ *     background-opacity: 0.16;
+ * }
+ */
+
+/* 7. Saved instances: list rows use their own selected/hovered states. */
+list-item {
+    background-color: var(--surface);
+    color: var(--text);
+    border-color: transparent;
+    border-width: 1px;
+    border-radius: 10px;
+}
+list-item:hover {
+    background-color: var(--surface-raised);
+    border-color: var(--border);
+}
+list-item:selected {
+    background-color: var(--selected-background);
+    border-color: var(--accent);
+}
+list-item:disabled {
+    opacity: 0.65;
+}

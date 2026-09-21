@@ -1,100 +1,98 @@
 using System;
-using System.Net.Http;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using CmlLib.Core.Auth;
-using CmlLib.Core.Auth.Microsoft;
-using CmlLib.Core.Auth.Microsoft.Sessions;
-using Microsoft.Identity.Client;
-using XboxAuthNet.Game.Accounts;
-using XboxAuthNet.Game.Msal;
-using XboxAuthNet.Game.Msal.OAuth;
+using NexLauncher.Models;
+using NexLauncher.Services.Authentication;
 
 namespace NexLauncher.Services;
 
-/// <summary>
-/// Browser-based Microsoft authentication. Tokens live only in this process.
-/// </summary>
+/// <summary>Serializes account operations and publishes changes only after encrypted storage commits.</summary>
 public sealed class MicrosoftAccountService : IAccountService
 {
     private readonly SemaphoreSlim _operation = new(1, 1);
-    private AuthState? _state;
-    private MSession? _session;
+    private readonly IMinecraftAuthenticationBackend _backend;
+    private readonly IAccountVault _vault;
+    private AccountVaultSnapshot _snapshot = AccountVaultSnapshot.Empty();
+    private bool _initialized;
 
-    public string? PlayerName => _session?.Username;
-
-    public async Task<MSession> SignInAsync(string clientId, CancellationToken cancellationToken)
+    public MicrosoftAccountService(string dataDirectory) : this(
+        new WindowsMinecraftAuthenticationBackend(),
+        new ProtectedAccountVault(Path.Combine(dataDirectory, "auth", "accounts.dat"), new WindowsAccountDataProtector()))
     {
-        var normalizedClientId = ValidateClientId(clientId);
-        await _operation.WaitAsync(cancellationToken);
-        try
-        {
-            // BuildApplication intentionally does not register a persistent MSAL cache.
-            var application = MsalClientHelper.BuildApplication(normalizedClientId);
-            var accounts = new InMemoryXboxGameAccountManager(JEGameAccount.FromSessionStorage);
-            var candidate = new AuthState(normalizedClientId, application,
-                (JEGameAccount)accounts.NewAccount(), accounts);
-
-            // Closing the browser does not notify MSAL. Bound the wait as well as
-            // allowing the launcher Cancel button to cancel it immediately.
-            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            timeout.CancelAfter(TimeSpan.FromMinutes(5));
-            var session = await AuthenticateAsync(candidate, interactive: true, timeout.Token);
-            cancellationToken.ThrowIfCancellationRequested();
-
-            var previous = _state;
-            _state = candidate;
-            _session = session;
-            if (previous is not null)
-                await ClearMsalCacheAsync(previous);
-            return session;
-        }
-        finally
-        {
-            _operation.Release();
-        }
     }
 
-    public async Task<MSession?> RestoreAsync(string clientId, CancellationToken cancellationToken)
+    public MicrosoftAccountService(IMinecraftAuthenticationBackend backend, IAccountVault vault)
+    {
+        _backend = backend;
+        _vault = vault;
+    }
+
+    public IReadOnlyList<LauncherAccount> Accounts { get; private set; } = Array.Empty<LauncherAccount>();
+    public string? ActiveAccountId => _snapshot.ActiveAccountId;
+    public string? PlayerName => Accounts.FirstOrDefault(account => account.Id == ActiveAccountId)?.Username;
+
+    public async Task InitializeAsync(CancellationToken cancellationToken)
+    {
+        await _operation.WaitAsync(cancellationToken);
+        try { await EnsureInitializedAsync(cancellationToken); }
+        finally { _operation.Release(); }
+    }
+
+    public async Task<MSession> SignInAsync(CancellationToken cancellationToken)
     {
         await _operation.WaitAsync(cancellationToken);
         try
         {
-            if (_state is null)
-                return null;
-
-            if (!Guid.TryParse(clientId?.Trim(), out var parsedClientId) ||
-                !string.Equals(_state.ClientId, parsedClientId.ToString(), StringComparison.OrdinalIgnoreCase))
-            {
-                var previous = _state;
-                _state = null;
-                _session = null;
-                await ClearMsalCacheAsync(previous);
-                return null;
-            }
-
-            try
-            {
-                // Refresh Microsoft/Xbox/Minecraft tokens and recheck ownership
-                // before launching. This method never opens a browser.
-                var session = await AuthenticateAsync(_state, interactive: false, cancellationToken);
-                cancellationToken.ThrowIfCancellationRequested();
-                _session = session;
-                return session;
-            }
-            catch (MsalUiRequiredException)
-            {
-                var previous = _state;
-                _state = null;
-                _session = null;
-                await ClearMsalCacheAsync(previous);
-                return null;
-            }
+            await EnsureInitializedAsync(cancellationToken);
+            var result = await _backend.AuthenticateAsync(_snapshot.Copy().Accounts, null, true, cancellationToken);
+            cancellationToken.ThrowIfCancellationRequested();
+            await CommitAsync(new AccountVaultSnapshot(result.Accounts, result.Session.UUID), cancellationToken);
+            return result.Session;
         }
-        finally
+        finally { _operation.Release(); }
+    }
+
+    public async Task<MSession?> RestoreAsync(CancellationToken cancellationToken)
+    {
+        await _operation.WaitAsync(cancellationToken);
+        try
         {
-            _operation.Release();
+            await EnsureInitializedAsync(cancellationToken);
+            if (ActiveAccountId is null) return null;
+            var result = await _backend.AuthenticateAsync(_snapshot.Copy().Accounts, ActiveAccountId, false, cancellationToken);
+            cancellationToken.ThrowIfCancellationRequested();
+            await CommitAsync(new AccountVaultSnapshot(result.Accounts, result.Session.UUID), cancellationToken);
+            return result.Session;
         }
+        finally { _operation.Release(); }
+    }
+
+    public async Task SelectAccountAsync(string id, CancellationToken cancellationToken)
+    {
+        await _operation.WaitAsync(cancellationToken);
+        try
+        {
+            await EnsureInitializedAsync(cancellationToken);
+            RequireAccount(id);
+            if (id != ActiveAccountId)
+                await CommitAsync(_snapshot.Copy() with { ActiveAccountId = id }, cancellationToken);
+        }
+        finally { _operation.Release(); }
+    }
+
+    public async Task RemoveAccountAsync(string id, CancellationToken cancellationToken)
+    {
+        await _operation.WaitAsync(cancellationToken);
+        try
+        {
+            await EnsureInitializedAsync(cancellationToken);
+            await RemoveCoreAsync(id, cancellationToken);
+        }
+        finally { _operation.Release(); }
     }
 
     public async Task SignOutAsync()
@@ -102,120 +100,49 @@ public sealed class MicrosoftAccountService : IAccountService
         await _operation.WaitAsync();
         try
         {
-            var previous = _state;
-            _state = null;
-            _session = null;
-            if (previous is not null)
-                await ClearMsalCacheAsync(previous);
+            await EnsureInitializedAsync(CancellationToken.None);
+            if (ActiveAccountId is not null)
+                await RemoveCoreAsync(ActiveAccountId, CancellationToken.None);
         }
-        finally
-        {
-            _operation.Release();
-        }
+        finally { _operation.Release(); }
     }
 
-    private static string ValidateClientId(string clientId)
+    private async Task EnsureInitializedAsync(CancellationToken cancellationToken)
     {
-        if (!Guid.TryParse(clientId?.Trim(), out var parsedClientId) || parsedClientId == Guid.Empty)
-            throw new InvalidOperationException(
-                "Укажи Application (client) ID своего приложения Microsoft в настройках. Инструкция: docs/MICROSOFT_AUTH.md.");
-        return parsedClientId.ToString();
+        if (_initialized) return;
+        var loaded = await _vault.LoadAsync(cancellationToken);
+        var accounts = _backend.GetAccounts(loaded.Accounts);
+        if (loaded.ActiveAccountId is not null && !accounts.Any(account => account.Id == loaded.ActiveAccountId))
+            throw new AccountStorageException("Активный аккаунт не найден в защищённом хранилище. Исходный файл сохранён.");
+        _snapshot = loaded.Copy();
+        Accounts = accounts;
+        _initialized = true;
     }
 
-    private static async Task<MSession> AuthenticateAsync(
-        AuthState state, bool interactive, CancellationToken cancellationToken)
+    private async Task RemoveCoreAsync(string id, CancellationToken cancellationToken)
     {
-        // Some CmlLib HTTP steps do not forward their context cancellation token.
-        // Attach it at the HTTP boundary so Cancel also stops those requests.
-        using var http = new HttpClient(new CancellationAwareHandler(cancellationToken))
-        {
-            Timeout = TimeSpan.FromSeconds(45)
-        };
-        var handler = new JELoginHandlerBuilder()
-            .WithHttpClient(http)
-            .WithAccountManager(state.Accounts)
-            .WithOAuthProvider(new MsalCodeFlowProvider(state.Application))
-            .Build();
-        var authenticator = handler.CreateAuthenticator(state.Account, cancellationToken);
-        authenticator.AddMsalOAuth(state.Application, msal => interactive
-            ? msal.Interactive(builder => builder.WithUseEmbeddedWebView(false).WithPrompt(Prompt.SelectAccount))
-            : msal.Silent());
-        authenticator.AddForceXboxAuthForJE(xbox => xbox.Basic());
-        authenticator.AddForceJEAuthenticator(je => je.WithGameOwnershipChecker().Build());
-
-        MSession session;
-        try
-        {
-            session = await authenticator.ExecuteForLauncherAsync();
-        }
-        catch (OperationCanceledException)
-        {
-            throw;
-        }
-        catch (MsalUiRequiredException) when (!interactive)
-        {
-            throw;
-        }
-        catch (MsalClientException exception) when (
-            exception.ErrorCode is "authentication_canceled" or "user_canceled" or "user_cancelled")
-        {
-            throw new OperationCanceledException("Вход в Microsoft отменён.", cancellationToken);
-        }
-        catch (JEAuthException exception) when (exception.StatusCode == 403)
-        {
-            throw new InvalidOperationException(
-                "Minecraft API отклонил вход (403). Проверь допуск своего Client ID к API Minecraft: docs/MICROSOFT_AUTH.md.");
-        }
-        catch (JEAuthException exception) when (exception.StatusCode == 404 ||
-            exception.Message.Contains("doesn't own", StringComparison.OrdinalIgnoreCase))
-        {
-            throw new InvalidOperationException(
-                "У этого аккаунта не найден доступ к Minecraft: Java Edition или игровой профиль. Проверь покупку/подписку и создай профиль на minecraft.net.");
-        }
-        catch (MsalException)
-        {
-            throw new InvalidOperationException(
-                "Microsoft не завершил вход. Проверь Client ID, тип личных аккаунтов и redirect URI http://localhost в регистрации приложения.");
-        }
-        catch (HttpRequestException)
-        {
-            throw new InvalidOperationException(
-                "Не удалось связаться с серверами входа. Проверь интернет и повтори попытку.");
-        }
-        catch (Exception)
-        {
-            // Do not send third-party exception bodies (which may contain
-            // authentication data) to the UI or to the launcher log.
-            throw new InvalidOperationException(
-                "Не удалось подтвердить аккаунт Microsoft/Xbox/Minecraft. Проверь Xbox-профиль, семейные ограничения и доступ к Java Edition.");
-        }
-
-        cancellationToken.ThrowIfCancellationRequested();
-        if (string.IsNullOrWhiteSpace(session.Username) || string.IsNullOrWhiteSpace(session.UUID) ||
-            string.IsNullOrWhiteSpace(session.AccessToken) || session.UserType != "msa")
-            throw new InvalidOperationException("Сервер не вернул действительный профиль Minecraft: Java Edition.");
-        return session;
+        RequireAccount(id);
+        var candidate = _snapshot.Copy();
+        candidate.Accounts.Remove(id);
+        var selected = candidate.ActiveAccountId == id
+            ? Accounts.FirstOrDefault(account => account.Id != id)?.Id
+            : candidate.ActiveAccountId;
+        await CommitAsync(candidate with { ActiveAccountId = selected }, cancellationToken);
     }
 
-    private static async Task ClearMsalCacheAsync(AuthState state)
+    private async Task CommitAsync(AccountVaultSnapshot candidate, CancellationToken cancellationToken)
     {
-        state.Accounts.ClearAccounts();
-        await MsalClientHelper.RemoveAccounts(state.Application);
+        var accounts = _backend.GetAccounts(candidate.Accounts);
+        if (candidate.ActiveAccountId is not null && !accounts.Any(account => account.Id == candidate.ActiveAccountId))
+            throw new InvalidOperationException("Сервис не вернул выбранный профиль Minecraft.");
+        await _vault.SaveAsync(candidate, cancellationToken);
+        _snapshot = candidate.Copy();
+        Accounts = accounts;
     }
 
-    private sealed record AuthState(
-        string ClientId,
-        IPublicClientApplication Application,
-        JEGameAccount Account,
-        InMemoryXboxGameAccountManager Accounts);
-
-    private sealed class CancellationAwareHandler(CancellationToken operationToken) : DelegatingHandler(new HttpClientHandler())
+    private void RequireAccount(string id)
     {
-        protected override async Task<HttpResponseMessage> SendAsync(
-            HttpRequestMessage request, CancellationToken cancellationToken)
-        {
-            using var linked = CancellationTokenSource.CreateLinkedTokenSource(operationToken, cancellationToken);
-            return await base.SendAsync(request, linked.Token);
-        }
+        if (!Accounts.Any(account => account.Id == id))
+            throw new InvalidOperationException("Выбранный аккаунт больше не сохранён. Обнови список аккаунтов.");
     }
 }

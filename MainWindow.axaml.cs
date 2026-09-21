@@ -1,5 +1,10 @@
+using System;
+using System.Linq;
+using System.Threading.Tasks;
 using Avalonia.Controls;
+using Avalonia.Platform.Storage;
 using NexLauncher.Services;
+using NexLauncher.Services.QuickCss;
 using NexLauncher.ViewModels;
 
 namespace NexLauncher;
@@ -12,13 +17,33 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
         DataContext = viewModel;
-        Opened += async (_, _) => await viewModel.InitializeAsync();
+        Opened += async (_, _) =>
+        {
+
+            try { await viewModel.QuickCss.AttachAsync(new QuickCssService(this), PickCssAsync); }
+            catch { viewModel.ErrorMessage = "Не удалось загрузить Quick CSS. Проверь файл в настройках."; }
+            await viewModel.InitializeAsync();
+        };
         Closing += (_, _) => viewModel.OnWindowClosing();
+        Closed += (_, _) => viewModel.Dispose();
+    }
+
+    private async Task<string?> PickCssAsync()
+    {
+        var files = await StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+        {
+            Title = "Выбрать тему Quick CSS",
+            AllowMultiple = false,
+            FileTypeFilter = [new FilePickerFileType("Quick CSS") { Patterns = ["*.css"] }]
+        });
+        try { return files.FirstOrDefault()?.TryGetLocalPath(); }
+        finally { foreach (var file in files) file.Dispose(); }
     }
 
     private static MainWindowViewModel CreateViewModel()
     {
         var store = new ConfigurationStore();
-        return new MainWindowViewModel(store, new MinecraftService(store.DataDirectory), new MicrosoftAccountService());
+        return new MainWindowViewModel(store, new MinecraftService(store.DataDirectory),
+            new MicrosoftAccountService(store.DataDirectory));
     }
 }
