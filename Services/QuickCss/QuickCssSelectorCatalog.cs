@@ -69,15 +69,16 @@ public static class QuickCssSelectorCatalog
 public sealed record QuickCssSelectorTarget(Type ControlType, string? ClassName = null,
     string? ExtraClass = null, string? State = null, bool IsRoot = false)
 {
-    internal Selector Build(Selector? previous)
+    internal Selector Build(Selector? previous, string activationClass)
     {
         // All rules share an ancestor class activator, so active rules use one style priority.
         // CSS source order can then win across semantic classes and ordinary type selectors.
-        var selector = IsRoot ? previous.OfType(ControlType) :
-            previous.OfType<Window>().Class("qc-app").Descendant().OfType(ControlType);
+        var selector = IsRoot ? previous.OfType(ControlType).Class(activationClass) :
+            previous.OfType<Window>().Class("qc-app").Class(activationClass).Descendant().OfType(ControlType);
         if (ClassName is not null) selector = selector.Class(ClassName);
         if (ExtraClass is not null) selector = selector.Class(ExtraClass);
         if (State is not null) selector = selector.Class(State);
         return selector;
     }
 }
+

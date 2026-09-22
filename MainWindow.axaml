@@ -58,10 +58,9 @@
                         </Border>
                         <StackPanel VerticalAlignment="Center">
                             <TextBlock Text="{Binding AccountName}" FontSize="13" MaxWidth="170" TextTrimming="CharacterEllipsis"/>
-                            <TextBlock Text="Microsoft · Java Edition" FontSize="10" Classes="muted" IsVisible="{Binding HasAccount}"/>
+                            <TextBlock Text="{Binding Accounts.AccountTypeLabel}" FontSize="10" Classes="muted" IsVisible="{Binding HasAccount}"/>
                         </StackPanel>
-                        <Button Content="Войти" Command="{Binding SignInCommand}" IsVisible="{Binding HasNoAccount}"/>
-                        <Button Content="Аккаунты" Command="{Binding NavigateCommand}" CommandParameter="settings" IsVisible="{Binding HasAccount}"/>
+                        <Button Content="Аккаунты" Command="{Binding NavigateCommand}" CommandParameter="settings"/>
                     </StackPanel>
                 </Border>
             </Grid>
@@ -109,11 +108,17 @@
                                    Classes="caption" TextWrapping="Wrap"/>
                         <Border Background="#202725" CornerRadius="10" Padding="18,15" IsVisible="{Binding HasNoAccount}">
                             <StackPanel Spacing="5">
-                                <TextBlock Text="Сначала подготовь игру" FontWeight="Medium" Foreground="#C8E4D7"/>
-                                <TextBlock Text="Сборки и установка доступны без входа. Для запуска понадобится Microsoft-аккаунт с доступом к Java Edition."
+                                <TextBlock Text="Выбери способ игры" FontWeight="Medium" Foreground="#C8E4D7"/>
+                                <TextBlock Text="Войди через Microsoft или создай локальный аккаунт. Сборки и установка доступны до выбора аккаунта."
                                            TextWrapping="Wrap" Classes="caption"/>
+                                <WrapPanel Margin="0,8,0,0">
+                                    <Button Content="Войти через Microsoft" Command="{Binding SignInCommand}" Margin="0,0,8,8"/>
+                                    <Button Content="Локальный аккаунт" Command="{Binding NavigateCommand}" CommandParameter="settings" Margin="0,0,0,8"/>
+                                </WrapPanel>
                             </StackPanel>
                         </Border>
+                        <TextBlock Text="{x:Static vm:AccountsViewModel.LocalLimitations}"
+                                   IsVisible="{Binding Accounts.IsLocalAccount}" Classes="caption" TextWrapping="Wrap"/>
                     </StackPanel>
                     <StackPanel IsVisible="{Binding IsInstancesPage}" Spacing="22">
                         <StackPanel Spacing="8">
@@ -189,19 +194,31 @@
                             <StackPanel DataContext="{Binding Accounts}" x:DataType="vm:AccountsViewModel" Spacing="12">
                                 <TextBlock Text="Аккаунты Minecraft" FontSize="18" FontWeight="SemiBold"/>
                                 <TextBlock Text="{Binding Status}" Classes="muted" TextWrapping="Wrap"/>
+                                <TextBlock Text="{Binding MicrosoftWarning}" IsVisible="{Binding HasMicrosoftWarning}" Classes="caption" TextWrapping="Wrap"/>
                                 <ComboBox ItemsSource="{Binding Items}" SelectedItem="{Binding SelectedAccount}" IsVisible="{Binding HasAccount}">
                                     <ComboBox.ItemTemplate>
                                         <DataTemplate x:DataType="models:LauncherAccount">
-                                            <TextBlock Text="{Binding Username}"/>
+                                            <StackPanel Orientation="Horizontal" Spacing="10">
+                                                <TextBlock Text="{Binding Username}"/>
+                                                <TextBlock Text="{Binding TypeLabel}" Classes="caption" VerticalAlignment="Center"/>
+                                            </StackPanel>
                                         </DataTemplate>
                                     </ComboBox.ItemTemplate>
                                 </ComboBox>
                                 <WrapPanel Orientation="Horizontal">
                                     <Button Content="Использовать" Command="{Binding ActivateCommand}" IsVisible="{Binding HasAccount}" Margin="0,0,8,8"/>
-                                    <Button Content="Добавить Microsoft" Command="{Binding AddCommand}" Margin="0,0,8,8"/>
+
                                     <Button Content="Выйти / удалить" Command="{Binding RemoveCommand}" IsVisible="{Binding HasAccount}" Margin="0,0,0,8"/>
                                 </WrapPanel>
-                                <TextBlock Text="Пароль вводится только в окне Microsoft. В Windows аккаунты защищены для текущего пользователя." Classes="caption" TextWrapping="Wrap"/>
+                                <TextBlock Text="Microsoft Account" FontWeight="SemiBold"/>
+                                <Button Content="Войти через Microsoft" Command="{Binding AddCommand}" HorizontalAlignment="Left"/>
+                                <TextBlock Text="Для игры с авторизованной сессией. Пароль вводится только в окне Microsoft." Classes="caption" TextWrapping="Wrap"/>
+                                <TextBlock Text="Играть без Microsoft · Локальный аккаунт" FontWeight="SemiBold" Margin="0,8,0,0"/>
+                                <TextBox Text="{Binding LocalUsername}" MaxLength="16" PlaceholderText="Minecraft-ник, например Alex_123"/>
+                                <TextBlock Text="От 3 до 16 латинских букв, цифр или _. Регистр влияет на локальный UUID." Classes="caption" TextWrapping="Wrap"/>
+                                <TextBlock Text="{Binding LocalError}" IsVisible="{Binding HasLocalError}" Classes="caption" TextWrapping="Wrap"/>
+                                <Button Content="Создать локальный аккаунт" Command="{Binding CreateLocalCommand}" HorizontalAlignment="Left"/>
+                                <TextBlock Text="{x:Static vm:AccountsViewModel.LocalLimitations}" Classes="caption" TextWrapping="Wrap"/>
                             </StackPanel>
                         </Border>
                         <Border Classes="card">
@@ -270,3 +287,5 @@
         </Grid>
     </Grid>
 </Window>
+
+

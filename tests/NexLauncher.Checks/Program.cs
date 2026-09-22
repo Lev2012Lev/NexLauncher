@@ -33,6 +33,8 @@ internal static class Program
                 QuickCssParserChecks.Run(Check);
                 await QuickCssRuntimeChecks.RunAsync(Root, Check);
                 await AuthenticationChecks.RunAsync(Root, Check);
+                OfflineLaunchChecks.Run(Check);
+                await LocalAccountChecks.RunAsync(Root, Check);
                 await CheckStorage();
                 await CheckViewModel();
                 await CheckBackendGuards();
@@ -122,6 +124,10 @@ internal static class Program
         await vm.SaveSettingsCommand.ExecuteAsync(null);
         Check((await store.LoadAsync()).Instances.Single().MemoryMb == 6144, "saved RAM reaches profile");
         await vm.PrimaryCommand.ExecuteAsync(null);
+        Check(game.LaunchCalls == 0 && accounts.SignInCalls == 0 && vm.CurrentPage == "settings",
+            "Play without an account opens the account choice without implicit Microsoft OAuth");
+        await vm.Accounts.AddCommand.ExecuteAsync(null);
+        await vm.PrimaryCommand.ExecuteAsync(null);
         Check(game.LaunchCalls == 1 && accounts.SignInCalls == 1 && vm.HasAccount && !vm.IsWorking, "authorized launch and exit reset UI");
 
         var firstAccountId = accounts.ActiveAccountId;
@@ -148,6 +154,30 @@ internal static class Program
         Check(vm.IsEditable && vm.Accounts.Items.Count == 1 && vm.Accounts.Status.Contains("отмен"),
             "cancelled interactive login resets UI and preserves accounts");
 
+        vm.Accounts.LocalUsername = "bad name!";
+        await vm.Accounts.CreateLocalCommand.ExecuteAsync(null);
+        Check(vm.Accounts.HasLocalError && !vm.Accounts.IsLocalAccount && vm.Accounts.Items.Count == 1,
+            "invalid local nickname shows inline error without replacing Microsoft account");
+        vm.Accounts.LocalUsername = "Local_Alex";
+        await vm.Accounts.CreateLocalCommand.ExecuteAsync(null);
+        Check(vm.Accounts.Items.Count == 2 && vm.Accounts.IsLocalAccount &&
+              vm.Accounts.AccountTypeLabel == "Локальный" && vm.AccountName == "Local_Alex" &&
+              vm.PrimaryButtonText == "Играть локально" && vm.Accounts.HasNoAvatar,
+            "local account appears beside Microsoft with explicit type and local launch label");
+        var oauthCalls = accounts.SignInCalls;
+        await vm.PrimaryCommand.ExecuteAsync(null);
+        Check(game.LastSessionUuid == LocalAccountIdentity.GetUuid("Local_Alex") &&
+              game.LastSessionType == "legacy" && accounts.SignInCalls == oauthCalls,
+            "local UI launch passes deterministic offline session without Microsoft OAuth");
+        vm.Accounts.SelectedAccount = vm.Accounts.Items.Single(x => x.Type == AccountType.Microsoft);
+        await vm.Accounts.ActivateCommand.ExecuteAsync(null);
+        await vm.PrimaryCommand.ExecuteAsync(null);
+        Check(!vm.Accounts.IsLocalAccount && vm.Accounts.AccountTypeLabel == "Microsoft" && game.LastSessionType == "msa",
+            "switching back to Microsoft restores the real session path and UI type");
+        vm.Accounts.SelectedAccount = vm.Accounts.Items.Single(x => x.Type == AccountType.Local);
+        await vm.Accounts.RemoveCommand.ExecuteAsync(null);
+        Check(vm.Accounts.Items.Count == 1 && vm.Accounts.AccountTypeLabel == "Microsoft",
+            "removing local account preserves the Microsoft account");
         // A running game prevents a second launch or an edit; cancellation never kills it.
         game.HoldLaunch = true;
         var running = vm.PrimaryCommand.ExecuteAsync(null);
@@ -264,6 +294,29 @@ internal static class Program
               (window.Background as ISolidColorBrush)?.Color == Color.Parse("#181A1D"),
             "disabling Quick CSS restores original surfaces");
         Check(!(await store.LoadAsync()).QuickCss.Enabled, "disabling Quick CSS persists");
+        // Allow Fluent brush transitions to finish before comparing rendered default controls.
+        await Task.Delay(350);
+        AvaloniaHeadlessPlatform.ForceRenderTimerTick(60);
+        Dispatcher.UIThread.RunJobs();
+        var defaultPlayButton = window.GetVisualDescendants().OfType<Button>().Single(x => x.Classes.Contains("qc-play-button"));
+        var defaultPresenter = defaultPlayButton.GetVisualDescendants().OfType<Avalonia.Controls.Presenters.ContentPresenter>().First();
+        Check((defaultPlayButton.Background as ISolidColorBrush)?.Color == Color.Parse("#78D9B3") &&
+              (defaultPresenter.Background as ISolidColorBrush)?.Color == Color.Parse("#78D9B3"),
+            "disabling Quick CSS restores both account-page controls and their Fluent template values");
+        vm.CurrentPage = "settings";
+        vm.Accounts.LocalUsername = "Local_Alex";
+        await vm.Accounts.CreateLocalCommand.ExecuteAsync(null);
+        Check(vm.Accounts.IsLocalAccount && vm.Accounts.AccountTypeLabel == "Локальный", "rendered UI identifies local profile explicitly");
+        Dispatcher.UIThread.RunJobs();
+        window.GetVisualDescendants().OfType<TextBlock>().First(x => x.Text == "Аккаунты Minecraft").BringIntoView();
+        Dispatcher.UIThread.RunJobs();
+        using (var frame = window.CaptureRenderedFrame()) frame!.Save(Path.Combine(Root, "local-account-settings.png"), PngBitmapEncoderOptions.Default);
+        vm.CurrentPage = "play";
+        Dispatcher.UIThread.RunJobs();
+        var playScroll = window.GetVisualDescendants().OfType<ScrollViewer>().First(x => x.Content is StackPanel);
+        playScroll.Offset = new Avalonia.Vector(0, 0);
+        Dispatcher.UIThread.RunJobs();
+        using (var frame = window.CaptureRenderedFrame()) frame!.Save(Path.Combine(Root, "local-account-play.png"), PngBitmapEncoderOptions.Default);
         window.Close();
     }
 
@@ -318,7 +371,7 @@ internal sealed class FakeMinecraft : IMinecraftService
 {
     public readonly HashSet<string> Installed = new();
     public int InstallCalls, LaunchCalls;
-    public string? LastSessionUuid;
+    public string? LastSessionUuid, LastSessionType;
     public bool HoldInstall, InstallStarted, HoldLaunch;
     public CancellationToken LaunchToken;
     public TaskCompletionSource<int> FinishLaunch = new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -341,6 +394,7 @@ internal sealed class FakeMinecraft : IMinecraftService
     {
         LaunchCalls++;
         LastSessionUuid = session.UUID;
+        LastSessionType = session.UserType;
         LaunchToken = token;
         progress.Report(new LaunchProgress("Игра запущена", null, true));
         log("Test game started.");
@@ -368,7 +422,24 @@ internal sealed class FakeAccounts : IAccountService
         ActiveAccountId = id;
         return Session();
     }
-    private MSession Session() => new(PlayerName!, "test-access-token", ActiveAccountId!) { UserType = "msa" };
+    public string? MicrosoftAvailabilityWarning => null;
+    public Task<LauncherAccount> CreateLocalAccountAsync(string username, CancellationToken token)
+    {
+        token.ThrowIfCancellationRequested();
+        var uuid = LocalAccountIdentity.GetUuid(username);
+        var id = "local:" + uuid;
+        var account = _accounts.FirstOrDefault(x => x.Id == id);
+        if (account is null)
+        {
+            account = new LauncherAccount(id, username, uuid, Type: AccountType.Local);
+            _accounts.Add(account);
+        }
+        ActiveAccountId = id;
+        return Task.FromResult(account);
+    }
+    private MSession Session() => _accounts.First(x => x.Id == ActiveAccountId).Type == AccountType.Local
+        ? LocalAccountIdentity.CreateSession(PlayerName!)
+        : new(PlayerName!, "test-access-token", ActiveAccountId!) { UserType = "msa" };
     public Task<MSession?> RestoreAsync(CancellationToken token)
     {
         token.ThrowIfCancellationRequested();
@@ -385,3 +456,9 @@ internal sealed class FakeAccounts : IAccountService
     }
     public Task SignOutAsync() { SignOutCalls++; return ActiveAccountId is null ? Task.CompletedTask : RemoveAccountAsync(ActiveAccountId, default); }
 }
+
+
+
+
+
+

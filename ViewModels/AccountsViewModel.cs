@@ -17,22 +17,31 @@ public partial class AccountsViewModel : ObservableObject, IDisposable
 {
     private readonly IAccountService _service;
     private readonly Func<Func<CancellationToken, Task>, Task> _run;
-
     private readonly Action _changed;
     private CancellationTokenSource? _avatarRequest;
     private bool _disposed;
 
     public ObservableCollection<LauncherAccount> Items { get; } = new();
     [ObservableProperty] private LauncherAccount? _selectedAccount;
-    [ObservableProperty] private string _status = "Войди в Microsoft, чтобы запускать Minecraft.";
+    [ObservableProperty] private string _status = "Войди через Microsoft или создай локальный аккаунт.";
+    [ObservableProperty] private string _localUsername = "";
+    [ObservableProperty] private string _localError = "";
     [ObservableProperty] private CroppedBitmap? _avatar;
-    public bool HasAccount => _service.ActiveAccountId is not null;
+    private LauncherAccount? ActiveAccount => Items.FirstOrDefault(x => x.Id == _service.ActiveAccountId);
+    public bool HasAccount => ActiveAccount is not null;
     public bool HasNoAccount => !HasAccount;
-    public string Username => _service.PlayerName ?? "Без аккаунта";
+    public bool IsLocalAccount => ActiveAccount?.Type == AccountType.Local;
+    public string AccountTypeLabel => ActiveAccount?.TypeLabel ?? "";
+    public string Username => ActiveAccount?.Username ?? "Без аккаунта";
     public string Initial => HasAccount ? Username[..1].ToUpperInvariant() : "N";
     public bool HasAvatar => Avatar is not null;
     public bool HasNoAvatar => !HasAvatar;
+    public bool HasLocalError => LocalError.Length > 0;
+    public string MicrosoftWarning => _service.MicrosoftAvailabilityWarning ?? "";
+    public bool HasMicrosoftWarning => MicrosoftWarning.Length > 0;
+    public const string LocalLimitations = "Локальный аккаунт не авторизован в Microsoft. Он предназначен для одиночной игры и серверов, допускающих offline-клиентов. Серверы online-mode требуют Microsoft-вход.";
     public IAsyncRelayCommand AddCommand { get; }
+    public IAsyncRelayCommand CreateLocalCommand { get; }
     public IAsyncRelayCommand ActivateCommand { get; }
     public IAsyncRelayCommand RemoveCommand { get; }
 
@@ -45,14 +54,15 @@ public partial class AccountsViewModel : ObservableObject, IDisposable
             Status = "Вход Microsoft… Закрой окно входа или нажми «Отменить», чтобы отменить.";
             await _service.SignInAsync(token);
             Refresh();
-            Status = "Аккаунт сохранён. Сессия обновляется перед запуском игры.";
+            Status = "Microsoft · " + Username + ". Сессия обновляется перед запуском игры.";
         }), canEdit);
+        CreateLocalCommand = new AsyncRelayCommand(CreateLocalAsync, canEdit);
         ActivateCommand = new AsyncRelayCommand(() => RunAsync(async token =>
         {
             if (SelectedAccount is not { } selected) return;
             await _service.SelectAccountAsync(selected.Id, token);
             Refresh();
-            Status = "Активный аккаунт: " + Username;
+            Status = "Активный аккаунт: " + Username + " · " + AccountTypeLabel;
         }), () => canEdit() && SelectedAccount is not null && SelectedAccount.Id != _service.ActiveAccountId);
         RemoveCommand = new AsyncRelayCommand(() => RunAsync(async token =>
         {
@@ -63,31 +73,61 @@ public partial class AccountsViewModel : ObservableObject, IDisposable
         }), () => canEdit() && SelectedAccount is not null);
     }
 
+    private async Task CreateLocalAsync()
+    {
+        if (!LocalAccountIdentity.IsValidUsername(LocalUsername))
+        {
+            LocalError = "Ник должен содержать от 3 до 16 символов: латинские буквы, цифры или _. Пробелы не допускаются.";
+            return;
+        }
+        LocalError = "";
+        await RunAsync(async token =>
+        {
+            await _service.CreateLocalAccountAsync(LocalUsername, token);
+            Refresh();
+            Status = "Локальный · " + Username + ". Вход Microsoft для этого профиля не выполняется.";
+        });
+    }
+
     private Task RunAsync(Func<CancellationToken, Task> action) => _run(async token =>
     {
         try { await action(token); }
-        catch (OperationCanceledException) { Status = "Вход отменён."; throw; }
-        catch (Exception ex) { Status = ex.Message; throw; }
+        catch (OperationCanceledException) { Refresh(); Status = "Операция с аккаунтом отменена."; throw; }
+        catch (Exception ex) { Refresh(); Status = ex.Message; throw; }
+        finally
+        {
+            OnPropertyChanged(nameof(MicrosoftWarning));
+            OnPropertyChanged(nameof(HasMicrosoftWarning));
+        }
     });
 
     public async Task InitializeAsync(CancellationToken token = default)
     {
         await _service.InitializeAsync(token);
         Refresh();
-        if (HasAccount) Status = "Аккаунт сохранён. Вход проверится при запуске.";
+        if (HasAccount)
+            Status = IsLocalAccount ? "Локальный · " + Username + ". Аккаунт сохранён на этом устройстве."
+                : "Microsoft · " + Username + ". Вход проверится при запуске.";
     }
 
     public async Task<MSession?> GetSessionAsync(CancellationToken token)
     {
-        Status = HasAccount ? "Обновляем сессию Minecraft…" : "Вход Microsoft…";
-        var session = await _service.RestoreAsync(token) ?? await _service.SignInAsync(token);
-        Refresh();
-        Status = "Minecraft: Java Edition · " + Username;
-        return session;
+        Status = IsLocalAccount ? "Подготовка локальной сессии…" : "Обновляем сессию Microsoft / Minecraft…";
+        try
+        {
+            // Choosing a local account never invokes interactive Microsoft login.
+            var session = await _service.RestoreAsync(token);
+            Refresh();
+            Status = session is null ? "Выбери аккаунт перед запуском." : AccountTypeLabel + " · " + Username;
+            return session;
+        }
+        catch (Exception ex) { Refresh(); Status = ex.Message; throw; }
     }
 
     public void SetError(string message) => Status = message;
     partial void OnSelectedAccountChanged(LauncherAccount? value) => RefreshCommands();
+    partial void OnLocalUsernameChanged(string value) => LocalError = "";
+    partial void OnLocalErrorChanged(string value) => OnPropertyChanged(nameof(HasLocalError));
     partial void OnAvatarChanged(CroppedBitmap? value)
     {
         OnPropertyChanged(nameof(HasAvatar)); OnPropertyChanged(nameof(HasNoAvatar));
@@ -95,6 +135,7 @@ public partial class AccountsViewModel : ObservableObject, IDisposable
     public void RefreshCommands()
     {
         AddCommand?.NotifyCanExecuteChanged();
+        CreateLocalCommand?.NotifyCanExecuteChanged();
         ActivateCommand?.NotifyCanExecuteChanged();
         RemoveCommand?.NotifyCanExecuteChanged();
     }
@@ -103,15 +144,16 @@ public partial class AccountsViewModel : ObservableObject, IDisposable
     {
         Items.Clear();
         foreach (var account in _service.Accounts) Items.Add(account);
-        SelectedAccount = Items.FirstOrDefault(x => x.Id == _service.ActiveAccountId);
-        foreach (var name in new[] { nameof(Username), nameof(Initial), nameof(HasAccount), nameof(HasNoAccount) })
+        SelectedAccount = ActiveAccount;
+        foreach (var name in new[] { nameof(Username), nameof(Initial), nameof(HasAccount), nameof(HasNoAccount),
+            nameof(IsLocalAccount), nameof(AccountTypeLabel), nameof(MicrosoftWarning), nameof(HasMicrosoftWarning) })
             OnPropertyChanged(name);
         RefreshCommands();
         _changed();
         _avatarRequest?.Cancel();
         _avatarRequest?.Dispose();
         _avatarRequest = new CancellationTokenSource();
-        _ = LoadAvatarAsync(SelectedAccount?.SkinUrl, _avatarRequest.Token);
+        _ = LoadAvatarAsync(IsLocalAccount ? null : ActiveAccount?.SkinUrl, _avatarRequest.Token);
     }
 
     private async Task LoadAvatarAsync(string? url, CancellationToken token)
@@ -133,3 +175,5 @@ public partial class AccountsViewModel : ObservableObject, IDisposable
         Avatar = null;
     }
 }
+
+

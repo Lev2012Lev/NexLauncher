@@ -73,7 +73,7 @@ public partial class MainWindowViewModel : ObservableObject
     public string DataDirectory => _store.DataDirectory;
     public string VersionCount => IsLoadingVersions ? "Обновляем список…" : $"{Versions.Count} версий";
     public string PrimaryButtonText => IsWorking ? (IsGameRunning ? "Игра запущена" : "Подготовка…") :
-        !HasInstance ? "Создать сборку" : !IsInstalled ? "Установить" : !HasAccount ? "Войти и играть" : "Играть";
+        !HasInstance ? "Создать сборку" : !IsInstalled ? "Установить" : !HasAccount ? "Выбрать аккаунт" : Accounts.IsLocalAccount ? "Играть локально" : "Играть";
     public string HeroTitle => IsGameRunning ? "Хорошей игры" : !HasInstance ? "Начни свой новый мир" :
         IsInstalled ? "Всё готово к игре" : "Подготовим игру";
 
@@ -273,7 +273,13 @@ public partial class MainWindowViewModel : ObservableObject
             {
                 await _minecraft.InstallAsync(instance, CreateProgress(), token);
                 StatusText = "Установка завершена. Сборка готова к запуску.";
-                Notice = HasAccount ? "Можно нажимать «Играть»." : "Для запуска войди в Microsoft-аккаунт с Minecraft: Java Edition.";
+                Notice = HasAccount ? "Можно нажимать «Играть»." : "Выбери Microsoft или локальный аккаунт в настройках.";
+                return;
+            }
+            if (!HasAccount)
+            {
+                CurrentPage = "settings";
+                Notice = "Войди через Microsoft или создай локальный аккаунт.";
                 return;
             }
             var session = await GetAccountSessionAsync(token);
@@ -316,8 +322,14 @@ public partial class MainWindowViewModel : ObservableObject
     }
     private Task RunAccountOperationAsync(Func<CancellationToken, Task> action)
     {
-        StatusText = "Аккаунты Microsoft…";
-        return RunOperationAsync(action);
+        StatusText = "Аккаунты Minecraft…";
+        return RunOperationAsync(async token =>
+        {
+            await action(token);
+            StatusText = Accounts.HasAccount
+                ? Accounts.Username + " · " + Accounts.AccountTypeLabel
+                : "Выбери Microsoft или локальный аккаунт.";
+        });
     }
 
     private async Task RunOperationAsync(Func<CancellationToken, Task> action)
@@ -442,3 +454,5 @@ public partial class MainWindowViewModel : ObservableObject
         if (!IsGameRunning) _operation?.Cancel();
     }
 }
+
+

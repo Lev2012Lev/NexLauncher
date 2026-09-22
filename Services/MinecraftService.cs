@@ -82,7 +82,7 @@ public sealed class MinecraftService : IMinecraftService
         ArgumentNullException.ThrowIfNull(log);
         cancellationToken.ThrowIfCancellationRequested();
         var settings = SnapshotAndValidate(instance);
-        var authorizedSession = CopyAuthorizedSession(session);
+        var launchSession = LaunchSessionPolicy.CopyForLaunch(session);
         await operationGate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
@@ -92,7 +92,7 @@ public sealed class MinecraftService : IMinecraftService
             progress.Report(new LaunchProgress("Подготовка запуска…"));
             using var process = await launcher.BuildProcessAsync(settings.VersionId, new MLaunchOption
             {
-                Session = authorizedSession,
+                Session = launchSession,
                 MaximumRamMb = settings.MemoryMb,
                 JavaPath = string.IsNullOrWhiteSpace(settings.JavaPath) ? null : settings.JavaPath,
                 GameLauncherName = "NexLauncher",
@@ -114,8 +114,8 @@ public sealed class MinecraftService : IMinecraftService
             // Once started the game owns its lifetime. Cancellation/closing the launcher must not kill it.
             // Drain both pipes concurrently so a full stderr buffer cannot block the Java process.
             var logGate = new object();
-            var stdout = ReadLogAsync(process.StandardOutput, log, logGate, authorizedSession);
-            var stderr = ReadLogAsync(process.StandardError, log, logGate, authorizedSession);
+            var stdout = ReadLogAsync(process.StandardOutput, log, logGate, launchSession);
+            var stderr = ReadLogAsync(process.StandardError, log, logGate, launchSession);
             await process.WaitForExitAsync(CancellationToken.None).ConfigureAwait(false);
             await Task.WhenAll(stdout, stderr).ConfigureAwait(false);
             return process.ExitCode;
@@ -217,23 +217,6 @@ public sealed class MinecraftService : IMinecraftService
     }
 
     private static bool IsNonEmptyFile(string path) => File.Exists(path) && new FileInfo(path).Length > 0;
-
-    private static MSession CopyAuthorizedSession(MSession session)
-    {
-        ArgumentNullException.ThrowIfNull(session);
-        // MSession.CheckIsValid also accepts CmlLib's placeholder offline sessions. Reject those here.
-        // AuthService obtains this session only after Microsoft/Minecraft profile verification.
-        if (!session.CheckIsValid() || session.UserType != "msa"
-            || !Guid.TryParse(session.UUID, out _)
-            || session.AccessToken is "access_token" or "0")
-            throw new InvalidOperationException("Для запуска войдите в Microsoft-аккаунт с Minecraft Java Edition.");
-        return new MSession(session.Username, session.AccessToken, session.UUID)
-        {
-            UserType = session.UserType,
-            ClientToken = session.ClientToken,
-            Xuid = session.Xuid
-        };
-    }
 
     private static async Task ReadLogAsync(StreamReader reader, Action<string> log, object logGate, MSession session)
     {

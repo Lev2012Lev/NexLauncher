@@ -5,9 +5,14 @@ Windows-версия использует поддерживаемый default O
 Старое поле MicrosoftClientId в settings.json оставлено только для совместимости со старыми настройками;
 новый Windows backend его не читает.
 
+Microsoft и локальные профили доступны в одном списке. Этот документ описывает
+Microsoft backend; локальные имена и общий выбор описаны в [ACCOUNTS.md](ACCOUNTS.md).
+Локальный профиль создаётся и выбирается явно, ошибка OAuth не превращает его
+в автоматическую замену Microsoft-сессии.
+
 ## Вход и запуск
 
-1. Нажми «Войти» в верхней панели или «Добавить Microsoft» в настройках аккаунтов. Откроется штатное окно Microsoft через Edge WebView2.
+1. Нажми «Войти через Microsoft» на главном экране или в настройках аккаунтов — откроется штатное окно Microsoft через Edge WebView2. Настройки можно открыть кнопкой «Аккаунты» в верхней панели.
 2. Выбери Microsoft-аккаунт. Пароль вводится только в форме Microsoft, NexLauncher его не получает.
 3. CmlLib получает OAuth credentials, затем Xbox token, Minecraft token, проверяет доступ к игре
    и загружает Java profile (UUID, username, skin URL).
@@ -33,7 +38,7 @@ Windows-версия использует поддерживаемый default O
 Обычно это `%LOCALAPPDATA%/NexLauncher/auth/accounts.dat`.
 
 Весь payload, включая Microsoft refresh/access tokens, Xbox/Minecraft tokens, публичные профили
-и выбранный UUID, зашифрован Windows DPAPI с `DataProtectionScope.CurrentUser`.
+и внутренний выбранный Microsoft UUID, зашифрован Windows DPAPI с `DataProtectionScope.CurrentUser`.
 Ключ управляется Windows; в исходниках нет паролей, ключа шифрования или Client Secret.
 Дополнительная фиксированная entropy служит разделением формата приложения, а не секретным ключом.
 Защита привязана к пользователю Windows: копирование файла другому пользователю не переносит вход.
@@ -42,7 +47,10 @@ Windows-версия использует поддерживаемый default O
 CmlLib подключён к собственному in-memory `IJsonStorage`; стандартный открытый
 `cml_accounts.json` не создаётся. Незавершённые/отменённые входы не попадают на диск.
 Перед сохранением создаётся только **зашифрованный** временный файл, затем файл атомарно заменяется.
-При ошибке сохранения UI и активный аккаунт остаются в предыдущем состоянии.
+При ошибке записи защищённого кеша Microsoft его прежнее состояние сохраняется.
+Общий выбор хранится отдельно в `auth/profiles.json`: если удаление credentials уже завершилось,
+а запись общего выбора затем дала ошибку, удаление не откатывается. UI показывает фактический
+список и сообщение об ошибке; повторное добавление удалённого аккаунта требует входа.
 Повреждённое или недоступное для расшифровки хранилище не перезаписывается автоматически.
 В этом случае закрой лаунчер, сохрани резервную копию `accounts.dat`, восстанови его из доверенной
 резервной копии либо переименуй, если осознанно хочешь заново войти во все аккаунты.
@@ -50,7 +58,9 @@ CmlLib подключён к собственному in-memory `IJsonStorage`; 
 Токены не публикуются в UI bindings, не записываются в обычный JSON настроек и не логируются.
 Сессия MSession проходит через локальную переменную операции запуска и передаётся MinecraftService;
 отдельное поле с последней сессией в ViewModel не хранится.
-UI получает только `LauncherAccount(Id, Username, Uuid, SkinUrl)`.
+UI получает только публичные поля `LauncherAccount(Id, Username, Uuid, SkinUrl, Type)`.
+Общий активный профиль (Microsoft или Local) сохраняется в публичном `auth/profiles.json`;
+Microsoft credentials остаются исключительно в защищённом `accounts.dat`.
 Ошибки сторонних API преобразуются в фиксированные пользовательские сообщения без их raw body/inner exception.
 Токены необходимы библиотеке в памяти во время работы; буферы plaintext DPAPI очищаются после шифрования/чтения.
 
@@ -59,7 +69,8 @@ UI получает только `LauncherAccount(Id, Username, Uuid, SkinUrl)`.
 Проверены установленные API CmlLib.Core 4.0.6, CmlLib.Core.Auth.Microsoft 3.3.1,
 XboxAuthNet.Game 1.4.1 и XboxAuthNet 3.0.4; signatures дополнительно сверены reflection с DLL.
 
-- `MicrosoftAccountService` — выбор/удаление аккаунтов, последовательные операции, commit после сохранения.
+- `AccountService` — общий список и выбор Microsoft/локальных профилей; делегирует Microsoft-операции существующему провайдеру.
+- `MicrosoftAccountService` — выбор/удаление Microsoft-аккаунтов, последовательные операции, commit после сохранения.
 - `IMinecraftAuthenticationBackend` — граница платформенного OAuth.
 - `WindowsMinecraftAuthenticationBackend` — `JELoginHandlerBuilder`,
   `AddForceMicrosoftOAuthForJE(...Interactive(...))` / `AddMicrosoftOAuthForJE(...Silent())`,
@@ -72,8 +83,9 @@ XboxAuthNet.Game 1.4.1 и XboxAuthNet 3.0.4; signatures дополнительн
 Добавлена Microsoft dependency `System.Security.Cryptography.ProtectedData 10.0.12` для DPAPI.
 Windows target `net10.0-windows` нужен, чтобы NuGet выбрал Windows-реализацию XboxAuthNet с WebView2.
 Обычный `net10.0` выбирает netstandard-версию без встроенного OAuth окна.
-WebView2 и WindowsForms приходят транзитивно из XboxAuthNet; для запуска нужен
-.NET Windows Desktop Runtime 10 и Microsoft Edge WebView2 Runtime.
+WebView2 и WindowsForms приходят транзитивно из XboxAuthNet. Текущему executable нужен
+.NET Windows Desktop Runtime 10. Microsoft Edge WebView2 Runtime требуется для Microsoft-входа;
+создание и использование локального аккаунта не открывают это окно и не требуют WebView2.
 
 ## Ограничения и ручная проверка
 
@@ -84,7 +96,10 @@ Default OAuth CmlLib доступен только в Windows. Linux/macOS backe
 
 Официальный ownership checker библиотеки может не отличать некоторые ошибки entitlement endpoint
 от отсутствия доступа к игре; сообщение советует проверить покупку/подписку и повторить попытку.
-Offline/cracked sessions не создаются. Установка игры доступна без аккаунта, запуск — после проверки сессии.
+Этот backend создаёт только проверенные Microsoft-сессии. Отдельный локальный профиль
+доступен для одиночной игры и серверов, допускающих offline-профили; его создание не вызывает
+OAuth и не снимает требования серверов с Microsoft-проверкой. Установка и проверка файлов
+по-прежнему могут требовать сеть. См. [локальные аккаунты](ACCOUNTS.md).
 
 Нужно проверить на реальном аккаунте:
 - первый вход и получение username/skin;

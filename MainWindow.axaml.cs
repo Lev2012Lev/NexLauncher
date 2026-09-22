@@ -44,6 +44,7 @@ public partial class MainWindow : Window
     {
         var store = new ConfigurationStore();
         return new MainWindowViewModel(store, new MinecraftService(store.DataDirectory),
-            new MicrosoftAccountService(store.DataDirectory));
+            new AccountService(store.DataDirectory));
     }
 }
+

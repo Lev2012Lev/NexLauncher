@@ -20,6 +20,7 @@ public sealed class QuickCssStyleApplier : IDisposable
 {
     private readonly Window _window;
     private Styles? _overlay;
+    private string? _activationClass;
     private List<Bitmap> _images = new();
     private readonly Dictionary<string, (bool Existed, object? Value)> _savedResources = new();
     private IResourceDictionary? _accentResources;
@@ -34,6 +35,7 @@ public sealed class QuickCssStyleApplier : IDisposable
         ObjectDisposedException.ThrowIf(_disposed, this);
         var diagnostics = new List<QuickCssDiagnostic>(prepared.Diagnostics);
         var styles = new Styles();
+        var activationClass = "qc-theme-" + Guid.NewGuid().ToString("N");
 
         Color? accent = null;
         var ruleCount = 0;
@@ -81,10 +83,10 @@ public sealed class QuickCssStyleApplier : IDisposable
                 }
                 if (setters.Count > 0)
                 {
-                    var style = new Style(s => target.Build(s));
+                    var style = new Style(s => target.Build(s, activationClass));
                     foreach (var setter in setters) style.Setters.Add(new Setter(setter.Key, setter.Value));
                     styles.Add(style);
-                    AddTemplateAdapter(styles, target, adapterSetters);
+                    AddTemplateAdapter(styles, target, adapterSetters, activationClass);
                 }
             }
             if (used) ruleCount++;
@@ -92,7 +94,12 @@ public sealed class QuickCssStyleApplier : IDisposable
         // Attach the replacement before releasing previous bitmaps. Failure preserves the old overlay.
         try { _window.Styles.Add(styles); }
         catch { _window.Styles.Remove(styles); throw; }
+        // Fluent template children can retain cached style instances after a parent Styles.Remove.
+        // A unique activator explicitly deactivates their setters and is never reused on reload.
+        if (_activationClass is not null) _window.Classes.Remove(_activationClass);
         if (_overlay is not null) _window.Styles.Remove(_overlay);
+        _activationClass = activationClass;
+        _window.Classes.Add(activationClass);
         _overlay = styles;
         foreach (var image in _images) image.Dispose();
         _images = prepared.TakeImages();
@@ -104,6 +111,8 @@ public sealed class QuickCssStyleApplier : IDisposable
     public void Clear()
     {
         Dispatcher.UIThread.VerifyAccess();
+        if (_activationClass is not null) _window.Classes.Remove(_activationClass);
+        _activationClass = null;
         if (_overlay is not null) _window.Styles.Remove(_overlay);
         _overlay = null;
         foreach (var image in _images) image.Dispose();
@@ -232,13 +241,13 @@ public sealed class QuickCssStyleApplier : IDisposable
         return false;
     }
 
-    private static void AddTemplateAdapter(Styles styles, QuickCssSelectorTarget target, IEnumerable<KeyValuePair<string, object?>> values)
+    private static void AddTemplateAdapter(Styles styles, QuickCssSelectorTarget target, IEnumerable<KeyValuePair<string, object?>> values, string activationClass)
     {
         var button = target.ControlType == typeof(Button) || target.ControlType == typeof(ListBoxItem);
         if (!button && target.ControlType != typeof(TextBox) && target.ControlType != typeof(ComboBox)) return;
         var adapter = new Style(s => button
-            ? target.Build(s).Template().OfType<ContentPresenter>().Name("PART_ContentPresenter")
-            : target.Build(s).Template().OfType<Border>().Name(target.ControlType == typeof(TextBox) ? "PART_BorderElement" : "Background"));
+            ? target.Build(s, activationClass).Template().OfType<ContentPresenter>().Name("PART_ContentPresenter")
+            : target.Build(s, activationClass).Template().OfType<Border>().Name(target.ControlType == typeof(TextBox) ? "PART_BorderElement" : "Background"));
         var effectiveSetters = new Dictionary<AvaloniaProperty, object?>();
         foreach (var pair in values)
         {
@@ -261,13 +270,13 @@ public sealed class QuickCssStyleApplier : IDisposable
             if (foreground.Key is not null)
             {
                 // Fluent sets these foregrounds on template parts in focused/disabled states.
-                var content = new Style(s => target.Build(s).Template().OfType<ContentControl>().Name("ContentPresenter"));
+                var content = new Style(s => target.Build(s, activationClass).Template().OfType<ContentControl>().Name("ContentPresenter"));
                 content.Setters.Add(new Setter(TemplatedControl.ForegroundProperty, foreground.Value));
                 styles.Add(content);
-                var placeholder = new Style(s => target.Build(s).Template().OfType<TextBlock>().Name("PlaceholderTextBlock"));
+                var placeholder = new Style(s => target.Build(s, activationClass).Template().OfType<TextBlock>().Name("PlaceholderTextBlock"));
                 placeholder.Setters.Add(new Setter(TextBlock.ForegroundProperty, foreground.Value));
                 styles.Add(placeholder);
-                var glyph = new Style(s => target.Build(s).Template().OfType<PathIcon>().Name("DropDownGlyph"));
+                var glyph = new Style(s => target.Build(s, activationClass).Template().OfType<PathIcon>().Name("DropDownGlyph"));
                 glyph.Setters.Add(new Setter(PathIcon.ForegroundProperty, foreground.Value));
                 styles.Add(glyph);
             }
@@ -278,3 +287,4 @@ public sealed class QuickCssStyleApplier : IDisposable
     internal static string Unquote(string value) => value.Length >= 2 && (value[0] == '\'' && value[^1] == '\'' || value[0] == '"' && value[^1] == '"') ? value[1..^1] : value;
     public void Dispose() { if (_disposed) return; Clear(); _disposed = true; }
 }
+

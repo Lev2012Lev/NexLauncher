@@ -11,7 +11,7 @@ using NexLauncher.Services.Authentication;
 namespace NexLauncher.Services;
 
 /// <summary>Serializes account operations and publishes changes only after encrypted storage commits.</summary>
-public sealed class MicrosoftAccountService : IAccountService
+public sealed class MicrosoftAccountService : IMicrosoftAccountService
 {
     private readonly SemaphoreSlim _operation = new(1, 1);
     private readonly IMinecraftAuthenticationBackend _backend;
